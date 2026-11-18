@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } f
 import ArticleImportDialog from './ArticleImportDialog'
 import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
+import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
 import type { GraphArtifact, GraphLineStyle, KnowledgeEdge, KnowledgeNode, KnowledgeNodeKind, NodeColor } from '../types'
 
@@ -12,6 +13,8 @@ type KnowledgeGraphEditorProps = {
   onBack: () => void
   onDelete: () => void
   onImportArticle: (title: string, text: string) => void
+  theme: ThemeMode
+  onToggleTheme: () => void
 }
 
 const palette: Array<{ value: NodeColor; label: string }> = [
@@ -89,7 +92,7 @@ function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, tow
   return { x: center.x + dx / length * half.width, y: center.y + dy / length * half.height }
 }
 
-function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportArticle }: KnowledgeGraphEditorProps) {
+function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportArticle, theme, onToggleTheme }: KnowledgeGraphEditorProps) {
   const size = useViewportSize()
   const layoutBounds = useMemo(() => {
     const desktop = size.width > 680
@@ -118,6 +121,33 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const moveNode = (id: string, x: number, y: number) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })
   const canvas = useCanvasController(size.width, size.height, moveNode)
   const rootNode = root
+
+  useEffect(() => {
+    const handleDeleteSelectedNode = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))) return
+      if (importOpen || searchOpen) return
+      if (selectedEdgeId) {
+        const edge = artifact.edges.find((item) => item.id === selectedEdgeId)
+        if (edge) {
+          event.preventDefault()
+          onChange({ ...artifact, edges: artifact.edges.filter((item) => item.id !== edge.id) })
+        }
+        setSelectedEdgeId('')
+        return
+      }
+      const node = artifact.nodes.find((item) => item.id === selectedId)
+      if (!node || node.id === rootNode?.id) return
+      event.preventDefault()
+      onChange({ ...artifact, nodes: artifact.nodes.filter((item) => item.id !== node.id), edges: artifact.edges.filter((edge) => edge.fromId !== node.id && edge.toId !== node.id) })
+      setSelectedId(rootNode?.id ?? '')
+      setSelectedEdgeId('')
+    }
+
+    window.addEventListener('keydown', handleDeleteSelectedNode)
+    return () => window.removeEventListener('keydown', handleDeleteSelectedNode)
+  }, [artifact, importOpen, onChange, rootNode?.id, searchOpen, selectedEdgeId, selectedId])
 
   useEffect(() => {
     if (!rootNode) return
@@ -183,13 +213,6 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
 
   const selectWithKey = (event: KeyboardEvent<SVGGElement>, node: KnowledgeNode) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(node.id); setSelectedEdgeId(''); return }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && node.id !== rootNode.id) {
-      event.preventDefault()
-      onChange({ ...artifact, nodes: artifact.nodes.filter((item) => item.id !== node.id), edges: artifact.edges.filter((edge) => edge.fromId !== node.id && edge.toId !== node.id) })
-      setSelectedId(rootNode.id)
-      setSelectedEdgeId('')
-      return
-    }
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
     const point = positionFor(node)
     const neighbors = [...new Set(artifact.edges.filter((edge) => edge.fromId === node.id || edge.toId === node.id).map((edge) => edge.fromId === node.id ? edge.toId : edge.fromId))]
@@ -308,7 +331,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         </g>
       </svg>
 
-      <CanvasHeader title={artifact.title} onTitleChange={(title) => onChange({ ...artifact, title })} onBack={onBack} onDelete={onDelete}>
+      <CanvasHeader title={artifact.title} onTitleChange={(title) => onChange({ ...artifact, title })} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme}>
         <button className="canvas-header-action" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>
         <button className="canvas-header-primary" type="button" onClick={addNode}><Icon name="plus" size={15} />关联节点</button>
       </CanvasHeader>

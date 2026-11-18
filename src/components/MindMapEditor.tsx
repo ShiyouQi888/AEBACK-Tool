@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
+import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
 import type { MindMapArtifact, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
 
@@ -10,6 +11,8 @@ type MindMapEditorProps = {
   onChange: (artifact: MindMapArtifact) => void
   onBack: () => void
   onDelete: () => void
+  theme: ThemeMode
+  onToggleTheme: () => void
 }
 
 const palette: Array<{ value: NodeColor; label: string }> = [
@@ -42,78 +45,96 @@ function getLayout(nodes: MindMapNode[], direction: MindMapDirection, width: num
   const positions = new Map<string, { x: number; y: number; depth: number }>()
   if (!root) return positions
   const center = { x: offsetX + width / 2, y: offsetY + height / 2 }
-  const nodeIds = new Set(nodes.map((node) => node.id))
+  const nodeById = new Map(nodes.map((node) => [node.id, node] as const))
+  const parentById = new Map<string, string | null>()
+  nodes.forEach((node) => {
+    if (node.id === root.id) { parentById.set(node.id, null); return }
+    const parentId = node.parentId && nodeById.has(node.parentId) && node.parentId !== node.id ? node.parentId : root.id
+    parentById.set(node.id, parentId)
+  })
+
+  // Break malformed parent cycles so every node is laid out exactly once.
+  nodes.forEach((node) => {
+    const path = new Set<string>()
+    let current: string | null = node.id
+    while (current && current !== root.id) {
+      if (path.has(current)) { parentById.set(current, root.id); break }
+      path.add(current)
+      current = parentById.get(current) ?? null
+    }
+  })
+
   const children = new Map<string, MindMapNode[]>()
   nodes.forEach((node) => {
     if (node.id === root.id) return
-    const parentId = node.parentId && nodeIds.has(node.parentId) ? node.parentId : root.id
+    const parentId = parentById.get(node.id) ?? root.id
     children.set(parentId, [...(children.get(parentId) ?? []), node])
   })
   const depthById = new Map<string, number>()
-  const setDepths = (node: MindMapNode, depth: number, seen = new Set<string>()) => {
-    if (seen.has(node.id)) return
+  const ranges = new Map<string, { first: number; last: number }>()
+  let leafCount = 0
+  const collectRanges = (node: MindMapNode, depth: number): { first: number; last: number } => {
     depthById.set(node.id, depth)
-    const nextSeen = new Set(seen).add(node.id)
-    ;(children.get(node.id) ?? []).forEach((child) => setDepths(child, depth + 1, nextSeen))
+    const descendants = children.get(node.id) ?? []
+    if (!descendants.length) {
+      const slot = leafCount++
+      const range = { first: slot, last: slot }
+      ranges.set(node.id, range)
+      return range
+    }
+    const childRanges = descendants.map((child) => collectRanges(child, depth + 1))
+    const range = { first: childRanges[0].first, last: childRanges[childRanges.length - 1].last }
+    ranges.set(node.id, range)
+    return range
   }
-  setDepths(root, 0)
-  nodes.forEach((node) => { if (!depthById.has(node.id)) depthById.set(node.id, 1) })
+  collectRanges(root, 0)
+
+  const leafTotal = Math.max(1, leafCount)
+  const slotFor = (node: MindMapNode) => {
+    const range = ranges.get(node.id) ?? { first: 0, last: 0 }
+    return (range.first + range.last) / 2 - (leafTotal - 1) / 2
+  }
+  positions.set(root.id, { ...center, depth: 0 })
 
   if (direction === 'radial') {
-    positions.set(root.id, { ...center, depth: 0 })
-    const branches = children.get(root.id) ?? []
-    const radiusStep = Math.min(width * 0.36, height * 0.14)
-    const minNodeX = offsetX + 80
-    const maxNodeX = offsetX + width - 80
-    const place = (parent: MindMapNode, depth: number, angle: number, span: number) => {
-      const descendants = children.get(parent.id) ?? []
-      descendants.forEach((node, index) => {
-        const childAngle = depth === 0
-          ? (index / Math.max(descendants.length, 1)) * Math.PI * 2 - Math.PI / 2
-          : angle + (index - (descendants.length - 1) / 2) * Math.min(span / Math.max(descendants.length, 1), 0.72)
-        const nextDepth = depth + 1
-        const x = center.x + Math.cos(childAngle) * radiusStep * nextDepth
-        positions.set(node.id, { x: Math.max(minNodeX, Math.min(maxNodeX, x)), y: center.y + Math.sin(childAngle) * radiusStep * nextDepth, depth: nextDepth })
-        const nextSpan = depth === 0 ? Math.PI * 2 / Math.max(branches.length, 1) : Math.max(0.45, span * 0.72)
-        place(node, nextDepth, childAngle, nextSpan)
+    const angleFor = (node: MindMapNode) => -Math.PI / 2 + ((slotFor(node) + (leafTotal - 1) / 2 + 0.5) / leafTotal) * Math.PI * 2
+    const depthGroups = new Map<number, MindMapNode[]>()
+    nodes.filter((node) => node.id !== root.id).forEach((node) => {
+      const depth = depthById.get(node.id) ?? 1
+      depthGroups.set(depth, [...(depthGroups.get(depth) ?? []), node])
+    })
+    let previousRadius = 0
+    ;[...depthGroups.keys()].sort((a, b) => a - b).forEach((depth) => {
+      const group = depthGroups.get(depth) ?? []
+      const sortedAngles = group.map(angleFor).map((angle) => (angle + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b)
+      let minGap = Math.PI * 2
+      if (sortedAngles.length > 1) {
+        minGap = Math.min(...sortedAngles.map((angle, index) => {
+          const next = sortedAngles[(index + 1) % sortedAngles.length] + (index === sortedAngles.length - 1 ? Math.PI * 2 : 0)
+          return next - angle
+        }))
+      }
+      const angleForChord = Math.min(Math.PI, minGap)
+      const minSeparationRadius = sortedAngles.length > 1 ? 190 / Math.max(0.001, 2 * Math.sin(angleForChord / 2)) : 0
+      const radius = Math.max(230 + (depth - 1) * 210, previousRadius + 210, minSeparationRadius)
+      group.forEach((node) => {
+        const angle = angleFor(node)
+        positions.set(node.id, { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius, depth })
       })
-    }
-    place(root, 0, -Math.PI / 2, Math.PI * 2)
+      previousRadius = radius
+    })
   } else {
-    const leaves: MindMapNode[] = []
-    const collectLeaves = (node: MindMapNode, seen = new Set<string>()) => {
-      if (seen.has(node.id)) return
-      const nextSeen = new Set(seen).add(node.id)
-      const descendants = children.get(node.id) ?? []
-      if (!descendants.length) leaves.push(node)
-      else descendants.forEach((child) => collectLeaves(child, nextSeen))
-    }
-    collectLeaves(root)
-    const leafStep = direction === 'down'
-      ? 170
-      : Math.max(48, Math.min(112, (height - 220) / Math.max(leaves.length - 1, 1)))
-    const leafSlots = new Map(leaves.map((node, index) => [node.id, index - (leaves.length - 1) / 2]))
-    const place = (node: MindMapNode, seen = new Set<string>()): number => {
-      if (seen.has(node.id)) return 0
-      const nextSeen = new Set(seen).add(node.id)
-      const descendants = children.get(node.id) ?? []
-      const slot = descendants.length
-        ? descendants.reduce((total, child) => total + place(child, nextSeen), 0) / descendants.length
-        : leafSlots.get(node.id) ?? 0
-      const depth = depthById.get(node.id) ?? 0
-      if (direction === 'down') positions.set(node.id, { x: center.x + slot * leafStep, y: Math.min(150, height * 0.18) + depth * Math.min(190, height * 0.24), depth })
+    nodes.filter((node) => node.id !== root.id).forEach((node) => {
+      const depth = depthById.get(node.id) ?? 1
+      const slot = slotFor(node)
+      if (direction === 'down') positions.set(node.id, { x: center.x + slot * 194, y: center.y + depth * 112, depth })
       else {
         const sign = direction === 'right' ? 1 : -1
-        const rootX = center.x - sign * Math.min(width * 0.27, 260)
-        const columnGap = Math.min(200, Math.max(170, width * 0.55))
-        positions.set(node.id, { x: rootX + sign * depth * columnGap, y: center.y + slot * leafStep, depth })
+        positions.set(node.id, { x: center.x + sign * depth * 212, y: center.y + slot * 88, depth })
       }
-      return slot
-    }
-    place(root)
+    })
   }
 
-  nodes.forEach((node) => { if (!positions.has(node.id)) positions.set(node.id, { ...center, depth: depthById.get(node.id) ?? 1 }) })
   return positions
 }
 
@@ -156,7 +177,7 @@ function getDescendantCount(nodeId: string, nodes: MindMapNode[]) {
   return count(nodeId)
 }
 
-function MindMapEditor({ artifact, onChange, onBack, onDelete }: MindMapEditorProps) {
+function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTheme }: MindMapEditorProps) {
   const size = useViewportSize()
   const layoutBounds = useMemo(() => {
     const desktop = size.width > 680
@@ -550,10 +571,11 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete }: MindMapEditorPr
             const childCount = artifact.nodes.filter((child) => child.parentId === node.id).length
             const hiddenCount = node.collapsed ? getDescendantCount(node.id, artifact.nodes) : 0
             return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${selectedNode ? ' canvas-node--selected' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={`编辑节点：${node.text}`} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
+              <title>{node.text}</title>
               <rect className="canvas-node-shape" width={nodeWidth} height={nodeHeight} rx={position.depth === 0 ? 16 : 13} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               {editingId === node.id ? <foreignObject className="mindmap-inline-editor" x="4" y="4" width={nodeWidth - 8} height={nodeHeight - 8}>
                 <input ref={inlineInputRef} aria-label="编辑节点文字" value={editingText} onChange={(event) => setEditingText(event.target.value)} onBlur={commitInlineEdit} onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
-              </foreignObject> : <text className="canvas-node-label" x={nodeWidth / 2} y={nodeHeight / 2 + 4} textAnchor="middle">{node.text.length > 24 ? `${node.text.slice(0, 24)}…` : node.text}</text>}
+              </foreignObject> : <text className="canvas-node-label" x={nodeWidth / 2} y={nodeHeight / 2 + 4} textAnchor="middle">{node.text.length > (position.depth === 0 ? 12 : 10) ? `${node.text.slice(0, position.depth === 0 ? 11 : 9)}…` : node.text}</text>}
               {editingId !== node.id && (['up', 'right', 'down', 'left'] as MindMapSide[]).map((side) => {
                 const point = side === 'up' ? { x: nodeWidth / 2, y: 0 }
                   : side === 'right' ? { x: nodeWidth, y: nodeHeight / 2 }
@@ -574,7 +596,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete }: MindMapEditorPr
         </g>
       </svg>
 
-      <CanvasHeader title={artifact.title} onTitleChange={(title) => commitChange({ ...artifact, title }, 'map-title')} onBack={onBack} onDelete={onDelete} />
+      <CanvasHeader title={artifact.title} onTitleChange={(title) => commitChange({ ...artifact, title }, 'map-title')} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme} />
       <div className="canvas-tool-rail" role="toolbar" aria-label="思维导图工具">
         <button className="canvas-tool-primary" type="button" aria-label="添加节点" title="添加节点" onClick={addNode}><Icon name="plus" size={18} /></button>
         <div className="history-controls" role="group" aria-label="撤销与重做"><button className="direction-button" type="button" aria-label="撤销" title="撤销 Ctrl+Z" disabled={!historyStatus.canUndo} onClick={undo}><Icon name="undo" size={16} /></button><button className="direction-button" type="button" aria-label="重做" title="重做 Ctrl+Shift+Z" disabled={!historyStatus.canRedo} onClick={redo}><Icon name="redo" size={16} /></button></div>

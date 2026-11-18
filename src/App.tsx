@@ -1,5 +1,5 @@
 // Aeback personal tools — one small workspace for maps, graphs, documents, and tables.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import ArticleImportDialog from './components/ArticleImportDialog'
 import DocumentEditor from './components/DocumentEditor'
 import Icon from './components/Icon'
@@ -7,12 +7,14 @@ import KnowledgeGraphEditor from './components/KnowledgeGraphEditor'
 import MindMapEditor from './components/MindMapEditor'
 import Sidebar from './components/Sidebar'
 import TableEditor from './components/TableEditor'
+import ThemeToggleButton, { type ThemeMode } from './components/ThemeToggleButton'
 import { starterArtifacts } from './data'
 import { parseArticle } from './lib/article'
 import { loadWorkspace, saveWorkspace } from './lib/storage'
 import { TOOL_LABELS, type ToolType, type WorkspaceArtifact, type WorkspaceView } from './types'
 
 const toolTypes: ToolType[] = ['mindmap', 'graph', 'document', 'table']
+const themeStorageKey = 'aeback-theme'
 const toolDescriptions: Record<ToolType, string> = {
   mindmap: '把复杂主题拆开，找到清晰的结构。',
   graph: '连接概念与资料，看见知识之间的关系。',
@@ -52,12 +54,28 @@ function ArtifactRow({ artifact, onOpen }: { artifact: WorkspaceArtifact; onOpen
 }
 
 function App() {
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    try {
+      return window.localStorage.getItem(themeStorageKey) === 'light' ? 'light' : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
   const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(() => loadWorkspace(starterArtifacts))
   const [view, setView] = useState<WorkspaceView>('library')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      window.localStorage.setItem(themeStorageKey, theme)
+    } catch {
+      // Keep the selected theme for this session if storage is unavailable.
+    }
+  }, [theme])
 
   useEffect(() => saveWorkspace(artifacts), [artifacts])
 
@@ -202,8 +220,8 @@ function App() {
     }
   }
 
-  if (selectedArtifact?.type === 'mindmap') return <MindMapEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('mindmap')} onDelete={deleteArtifact} />
-  if (selectedArtifact?.type === 'graph') return <KnowledgeGraphEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('graph')} onDelete={deleteArtifact} onImportArticle={importArticle} />
+  if (selectedArtifact?.type === 'mindmap') return <MindMapEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('mindmap')} onDelete={deleteArtifact} theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
+  if (selectedArtifact?.type === 'graph') return <KnowledgeGraphEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('graph')} onDelete={deleteArtifact} onImportArticle={importArticle} theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
 
   return (
     <div className="aeback-app">
@@ -218,6 +236,7 @@ function App() {
             {!selectedArtifact && <label className="global-search"><Icon name="search" size={16} /><input aria-label="搜索文件" value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} /></label>}
             {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>}
             {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label="删除文件" title="删除文件" onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
+            <ThemeToggleButton theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
             <div className="create-anchor">
               <button className="primary-button" type="button" onClick={mainCreate}><Icon name="plus" size={16} />新建</button>
               {createMenuOpen && <div className="create-menu" role="menu">{toolTypes.map((type) => <button type="button" role="menuitem" key={type} onClick={() => createArtifact(type)}><Icon name={type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type} size={16} />{TOOL_LABELS[type]}</button>)}</div>}

@@ -1,7 +1,7 @@
 // Aeback icon set for a compact, consistent personal tools workspace.
 import type { ReactNode } from 'react'
 
-export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'branch' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo'
+export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'branch' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo' | 'sun' | 'moon'
 
 const icons: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.4" /><rect x="14" y="3" width="7" height="7" rx="1.4" /><rect x="3" y="14" width="7" height="7" rx="1.4" /><rect x="14" y="14" width="7" height="7" rx="1.4" /></>,
@@ -27,6 +27,8 @@ const icons: Record<IconName, ReactNode> = {
   duplicate: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
   undo: <><path d="M9 14 4 9l5-5" /><path d="M4 9h9a6 6 0 0 1 0 12h-2" /></>,
   redo: <><path d="m15 14 5-5-5-5" /><path d="M20 9h-9a6 6 0 0 0 0 12h2" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>,
+  moon: <path d="M20.9 13.1A8.5 8.5 0 0 1 10.9 3.1 8.6 8.6 0 1 0 20.9 13.1Z" />,
 }
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
