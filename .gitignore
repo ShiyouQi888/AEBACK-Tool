@@ -1,0 +1,6 @@
+# Aeback generated and local-only files.
+node_modules/
+dist/
+.vite/
+*.local
+*.tsbuildinfo
