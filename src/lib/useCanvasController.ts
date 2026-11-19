@@ -106,5 +106,12 @@ export function useCanvasController(width: number, height: number, moveNode: (id
     setCamera({ zoom, x: targetX - (bounds.minX + bounds.maxX) / 2 * zoom, y: targetY - (bounds.minY + bounds.maxY) / 2 * zoom })
   }
 
-  return { camera, svgRef, startPan, startNodeDrag, onPointerMove, stopGesture, onWheel, zoomIn, zoomOut, resetCamera, fitBounds }
+  const focusPoint = (point: { x: number; y: number }, viewport: CanvasViewport, zoom = 1) => {
+    const nextZoom = Math.max(0.35, Math.min(2.8, zoom))
+    const targetX = (viewport.left + viewport.right) / 2
+    const targetY = (viewport.top + viewport.bottom) / 2
+    setCamera({ zoom: nextZoom, x: targetX - point.x * nextZoom, y: targetY - point.y * nextZoom })
+  }
+
+  return { camera, svgRef, startPan, startNodeDrag, onPointerMove, stopGesture, onWheel, zoomIn, zoomOut, resetCamera, fitBounds, focusPoint }
 }

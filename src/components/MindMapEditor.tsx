@@ -39,7 +39,9 @@ const lineStyles: Array<{ value: MindMapLineStyle; label: string; icon: IconName
 type MindMapSide = MindMapCrossLinkSide
 type MindMapConnectionPreview = { fromId: string; fromSide: MindMapSide; start: { x: number; y: number }; end: { x: number; y: number }; targetId?: string }
 type MindMapConnectionDrag = MindMapConnectionPreview & { pointerId: number; startClientX: number; startClientY: number; moved: boolean }
+type MindMapNodeFocusPointer = { id: string; pointerId: number; startClientX: number; startClientY: number; moved: boolean }
 const sideLabels: Record<MindMapSide, string> = { up: '上方', right: '右侧', down: '下方', left: '左侧' }
+const nodeFocusZoom = 1.1
 
 function getMindMapConnectionAnchor(center: { x: number; y: number }, width: number, height: number, side: MindMapSide) {
   if (side === 'up') return { x: center.x, y: center.y - height / 2 }
@@ -247,6 +249,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   const [connectionNotice, setConnectionNotice] = useState('')
   const [crossLinkPreview, setCrossLinkPreview] = useState<MindMapConnectionPreview | null>(null)
   const crossLinkDragRef = useRef<MindMapConnectionDrag | null>(null)
+  const nodeFocusPointerRef = useRef<MindMapNodeFocusPointer | null>(null)
   const suppressAddHandleClickRef = useRef(false)
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -598,6 +601,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       event.preventDefault()
       event.stopPropagation()
       lastNodeTapRef.current = null
+      nodeFocusPointerRef.current = null
       chooseConnectionNode(node.id)
       return
     }
@@ -606,12 +610,14 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     const previousTap = lastNodeTapRef.current
     if (previousTap?.id === node.id && now - previousTap.time < 360) {
       lastNodeTapRef.current = null
+      nodeFocusPointerRef.current = null
       event.preventDefault()
       event.stopPropagation()
       beginInlineEdit(node)
       return
     }
     lastNodeTapRef.current = { id: node.id, time: now }
+    nodeFocusPointerRef.current = { id: node.id, pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY, moved: false }
     setSelectedId(node.id)
     setInspectorOpen(true)
     canvas.startNodeDrag(node.id, position.x, position.y, event)
@@ -686,7 +692,19 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     setSelectedId(nodeId)
     setSelectedCrossLinkId(null)
     setInspectorOpen(true)
+    const node = artifact.nodes.find((item) => item.id === nodeId)
+    if (node) canvas.focusPoint(positionFor(node), layoutBounds.viewport, nodeFocusZoom)
     requestAnimationFrame(() => document.getElementById(`mindmap-node-${nodeId}`)?.focus())
+  }
+
+  const finishNodeClick = (event: PointerEvent<SVGSVGElement>) => {
+    const pointer = nodeFocusPointerRef.current
+    nodeFocusPointerRef.current = null
+    if (!pointer || pointer.pointerId !== event.pointerId) return
+    const moved = pointer.moved || Math.hypot(event.clientX - pointer.startClientX, event.clientY - pointer.startClientY) > 6
+    if (moved) return
+    const node = artifact.nodes.find((item) => item.id === pointer.id)
+    if (node) canvas.focusPoint(positionFor(node), layoutBounds.viewport, nodeFocusZoom)
   }
 
   const activateNode = (event: KeyboardEvent<SVGGElement>, node: MindMapNode) => {
@@ -818,9 +836,14 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
         preserveAspectRatio="none"
         aria-label={`${artifact.title} 思维导图画布`}
         onPointerDown={canvas.startPan}
-        onPointerMove={(event) => { canvas.onPointerMove(event); updateCrossLinkDrag(event) }}
-        onPointerUp={(event) => { finishCrossLinkDrag(event); canvas.stopGesture(event); finishHistoryGroup() }}
-        onPointerCancel={(event) => { cancelCrossLinkDrag(); canvas.stopGesture(event); finishHistoryGroup() }}
+        onPointerMove={(event) => {
+          const pointer = nodeFocusPointerRef.current
+          if (pointer?.pointerId === event.pointerId && Math.hypot(event.clientX - pointer.startClientX, event.clientY - pointer.startClientY) > 6) pointer.moved = true
+          canvas.onPointerMove(event)
+          updateCrossLinkDrag(event)
+        }}
+        onPointerUp={(event) => { finishCrossLinkDrag(event); finishNodeClick(event); canvas.stopGesture(event); finishHistoryGroup() }}
+        onPointerCancel={(event) => { cancelCrossLinkDrag(); nodeFocusPointerRef.current = null; canvas.stopGesture(event); finishHistoryGroup() }}
         onWheel={canvas.onWheel}
       >
         <defs><pattern id="aeback-mindmap-grid" width="26" height="26" patternUnits="userSpaceOnUse"><path d="M 26 0 H 0 V 26" fill="none" stroke="var(--aeback-grid)" strokeWidth="1" /></pattern></defs>
