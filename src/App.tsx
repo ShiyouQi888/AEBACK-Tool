@@ -6,8 +6,10 @@ import KnowledgeGraphEditor from './components/KnowledgeGraphEditor'
 import MindMapEditor from './components/MindMapEditor'
 import Sidebar from './components/Sidebar'
 import ThemeToggleButton, { type ThemeMode } from './components/ThemeToggleButton'
+import LanguageSwitcher from './components/LanguageSwitcher'
 import { starterArtifacts } from './data'
 import { parseArticle } from './lib/article'
+import { useI18n } from './lib/i18n'
 import { loadWorkspace, saveWorkspace } from './lib/storage'
 import { TOOL_LABELS, type ToolType, type WorkspaceArtifact, type WorkspaceView } from './types'
 
@@ -27,11 +29,11 @@ function makeId() {
   return `aeback-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
-function formatUpdated(value: string) {
+function formatUpdated(value: string, locale: string, t: (source: string) => string) {
   const date = new Date(value)
   const today = new Date()
-  if (date.toDateString() === today.toDateString()) return '今天'
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(date)
+  if (date.toDateString() === today.toDateString()) return t('今天')
+  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(date)
 }
 
 function getSearchText(artifact: WorkspaceArtifact) {
@@ -44,17 +46,19 @@ function getSearchText(artifact: WorkspaceArtifact) {
 }
 
 function ArtifactRow({ artifact, onOpen }: { artifact: WorkspaceArtifact; onOpen: (artifact: WorkspaceArtifact) => void }) {
+  const { t, locale } = useI18n()
   const icon = artifact.type === 'mindmap' ? 'mindmap' : artifact.type === 'graph' ? 'network' : artifact.type
   return <button className="file-row" type="button" onClick={() => onOpen(artifact)}>
     <span className={`file-icon file-icon--${artifact.type}`}><Icon name={icon} size={16} /></span>
     <span className="file-row-title">{artifact.title}</span>
-    <span className="file-row-type">{TOOL_LABELS[artifact.type]}</span>
-    <span className="file-row-date">{formatUpdated(artifact.updatedAt)}</span>
+    <span className="file-row-type">{t(TOOL_LABELS[artifact.type])}</span>
+    <span className="file-row-date">{formatUpdated(artifact.updatedAt, locale, t)}</span>
     <Icon name="arrow" size={15} />
   </button>
 }
 
 function App() {
+  const { t } = useI18n()
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
       return window.localStorage.getItem(themeStorageKey) === 'light' ? 'light' : 'dark'
@@ -152,14 +156,14 @@ function App() {
     const id = makeId()
     let artifact: WorkspaceArtifact
     if (type === 'mindmap') {
-      artifact = { id, type, title: '未命名导图', updatedAt: new Date().toISOString(), nodes: [{ id: `${id}-root`, text: '中心主题', parentId: null }] }
+      artifact = { id, type, title: t('未命名导图'), updatedAt: new Date().toISOString(), nodes: [{ id: `${id}-root`, text: t('中心主题'), parentId: null }] }
     } else if (type === 'graph') {
       const rootId = `${id}-root`
-      artifact = { id, type, title: '未命名图谱', updatedAt: new Date().toISOString(), rootId, nodes: [{ id: rootId, text: '中心主题' }], edges: [] }
+      artifact = { id, type, title: t('未命名图谱'), updatedAt: new Date().toISOString(), rootId, nodes: [{ id: rootId, text: t('中心主题') }], edges: [] }
     } else if (type === 'document') {
-      artifact = { id, type, title: '未命名文档', updatedAt: new Date().toISOString(), content: '' }
+      artifact = { id, type, title: t('未命名文档'), updatedAt: new Date().toISOString(), content: '' }
     } else {
-      artifact = { id, type, title: '未命名表格', updatedAt: new Date().toISOString(), columns: ['名称', '值'], rows: [['', '']] }
+      artifact = { id, type, title: t('未命名表格'), updatedAt: new Date().toISOString(), columns: [t('名称'), t('值')], rows: [['', '']] }
     }
     setArtifacts((current) => [artifact, ...current])
     setView(type)
@@ -173,7 +177,7 @@ function App() {
   }
 
   const deleteArtifact = () => {
-    if (!selectedArtifact || !window.confirm(`删除「${selectedArtifact.title}」？`)) return
+    if (!selectedArtifact || !window.confirm(t('删除「{title}」？', { title: selectedArtifact.title }))) return
     setArtifacts((current) => current.filter((artifact) => artifact.id !== selectedArtifact.id))
     setSelectedId(null)
   }
@@ -201,7 +205,7 @@ function App() {
     setImportOpen(false)
   }
 
-  const pageTitle = selectedArtifact?.title ?? (view === 'library' ? '全部文件' : TOOL_LABELS[view])
+  const pageTitle = selectedArtifact?.title ?? (view === 'library' ? t('全部文件') : t(TOOL_LABELS[view]))
   const mainCreate = () => {
     if (view === 'library') setCreateMenuOpen((open) => !open)
     else createArtifact(view)
@@ -212,37 +216,37 @@ function App() {
       <div className="library-hero">
         <div className="library-hero-copy">
           <p className="eyebrow">AEBACK · PERSONAL WORKSPACE</p>
-          <h2>把零散的想法，<span>整理成自己的知识。</span></h2>
-          <p>从一张思维导图开始，连接资料，再把重要内容沉淀下来。</p>
+          <h2>{t('把零散的想法，')}<span>{t('整理成自己的知识。')}</span></h2>
+          <p>{t('从一张思维导图开始，连接资料，再把重要内容沉淀下来。')}</p>
         </div>
         <div className="workspace-summary">
           <span className="summary-icon"><Icon name="grid" size={18} /></span>
-          <span className="summary-label">工作区内容</span>
+          <span className="summary-label">{t('工作区内容')}</span>
           <strong>{artifacts.length}</strong>
-          <small>件资料保存在本地</small>
+          <small>{t('件资料保存在本地')}</small>
         </div>
       </div>
-      <div className="tool-overview-grid" aria-label="工具分类">
+      <div className="tool-overview-grid" aria-label={t('工具分类')}>
         {toolTypes.map((type) => {
           const icon = type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type
           const count = artifacts.filter((artifact) => artifact.type === type).length
           return <button className={`tool-overview-card tool-overview-card--${type}`} type="button" key={type} onClick={() => navigate(type)}>
             <span className="tool-overview-top">
               <span className={`file-icon file-icon--${type}`}><Icon name={icon} size={18} /></span>
-              <span className="tool-overview-count">{count} 项</span>
+              <span className="tool-overview-count">{t('{count} 项', { count })}</span>
             </span>
-            <span className="tool-overview-title">{TOOL_LABELS[type]}<Icon name="arrow" size={15} /></span>
-            <span className="tool-overview-description">{toolDescriptions[type]}</span>
+            <span className="tool-overview-title">{t(TOOL_LABELS[type])}<Icon name="arrow" size={15} /></span>
+            <span className="tool-overview-description">{t(toolDescriptions[type])}</span>
           </button>
         })}
       </div>
       <div className="library-section-heading">
-        <div><h2>最近内容</h2><p>继续整理你正在思考的事</p></div>
-        <span>{filteredArtifacts.length} 项</span>
+        <div><h2>{t('最近内容')}</h2><p>{t('继续整理你正在思考的事')}</p></div>
+        <span>{t('{count} 项', { count: filteredArtifacts.length })}</span>
       </div>
       <div className="library-list">
-        <div className="list-heading"><span>名称</span><span>类型</span><span>修改时间</span><span /></div>
-        {filteredArtifacts.length ? filteredArtifacts.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} onOpen={openArtifact} />) : <div className="library-empty">没有匹配的文件</div>}
+        <div className="list-heading"><span>{t('名称')}</span><span>{t('类型')}</span><span>{t('修改时间')}</span><span /></div>
+        {filteredArtifacts.length ? filteredArtifacts.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} onOpen={openArtifact} />) : <div className="library-empty">{t('没有匹配的文件')}</div>}
       </div>
     </section>
   )
@@ -251,12 +255,12 @@ function App() {
     <section className="tool-list-page">
       <div className="tool-list-intro">
         <div className={`file-icon file-icon--${type}`}><Icon name={type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type} size={20} /></div>
-        <div><p className="eyebrow">AEBACK WORKSPACE</p><h2>{TOOL_LABELS[type]}</h2><p>{toolDescriptions[type]}</p></div>
-        <span className="tool-list-count">{filteredArtifacts.length} 项内容</span>
+        <div><p className="eyebrow">AEBACK WORKSPACE</p><h2>{t(TOOL_LABELS[type])}</h2><p>{t(toolDescriptions[type])}</p></div>
+        <span className="tool-list-count">{t('{count} 项内容', { count: filteredArtifacts.length })}</span>
       </div>
       <div className="library-list">
-        <div className="list-heading"><span>名称</span><span>类型</span><span>修改时间</span><span /></div>
-        {filteredArtifacts.length ? filteredArtifacts.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} onOpen={openArtifact} />) : <div className="library-empty"><button className="text-create" type="button" onClick={() => createArtifact(type)}>新建{TOOL_LABELS[type]}</button></div>}
+        <div className="list-heading"><span>{t('名称')}</span><span>{t('类型')}</span><span>{t('修改时间')}</span><span /></div>
+        {filteredArtifacts.length ? filteredArtifacts.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} onOpen={openArtifact} />) : <div className="library-empty"><button className="text-create" type="button" onClick={() => createArtifact(type)}>{t('新建{tool}', { tool: t(TOOL_LABELS[type]) })}</button></div>}
       </div>
     </section>
   )
@@ -278,23 +282,24 @@ function App() {
       <main className={`main-area${selectedArtifact?.type === 'table' ? ' main-area--table' : ''}${selectedArtifact?.type === 'document' ? ' main-area--document' : ''}`}>
         <header className="app-header">
           <div className="heading-area">
-            {selectedArtifact && <button className="back-button" type="button" aria-label="返回文件列表" onClick={() => { setSelectedId(null); setView(selectedArtifact.type) }}><Icon name="back" size={17} /></button>}
-            {selectedArtifact ? <input aria-label="文件名称" className="artifact-title-input" value={selectedArtifact.title} onChange={(event) => updateArtifact({ ...selectedArtifact, title: event.target.value })} /> : <h1>{pageTitle}</h1>}
+            {selectedArtifact && <button className="back-button" type="button" aria-label={t('返回文件列表')} onClick={() => { setSelectedId(null); setView(selectedArtifact.type) }}><Icon name="back" size={17} /></button>}
+            {selectedArtifact ? <input aria-label={t('文件名称')} className="artifact-title-input" value={selectedArtifact.title} onChange={(event) => updateArtifact({ ...selectedArtifact, title: event.target.value })} /> : <h1>{pageTitle}</h1>}
           </div>
           <div className="header-actions">
-            {selectedArtifact && <span className={`editor-save-status${saveError ? ' editor-save-status--error' : ''}`} role="status">{saveError || '本地已保存'}</span>}
-            {!selectedArtifact && <label className="global-search"><Icon name="search" size={16} /><input aria-label="搜索文件" value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} /></label>}
-            {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>}
-            {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label="删除文件" title="删除文件" onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
+            {selectedArtifact && <span className={`editor-save-status${saveError ? ' editor-save-status--error' : ''}`} role="status">{saveError ? t(saveError) : t('本地已保存')}</span>}
+            {!selectedArtifact && <label className="global-search"><Icon name="search" size={16} /><input aria-label={t('搜索文件')} value={query} placeholder={t('搜索')} onChange={(event) => setQuery(event.target.value)} /></label>}
+            {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />{t('导入文章')}</button>}
+            {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label={t('删除文件')} title={t('删除文件')} onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
+            <LanguageSwitcher />
             <ThemeToggleButton theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
             <div className="create-anchor">
-              <button className="primary-button" type="button" onClick={mainCreate}><Icon name="plus" size={16} />新建</button>
-              {createMenuOpen && <div className="create-menu" role="menu">{toolTypes.map((type) => <button type="button" role="menuitem" key={type} onClick={() => createArtifact(type)}><Icon name={type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type} size={16} />{TOOL_LABELS[type]}</button>)}</div>}
+              <button className="primary-button" type="button" onClick={mainCreate}><Icon name="plus" size={16} />{t('新建')}</button>
+              {createMenuOpen && <div className="create-menu" role="menu">{toolTypes.map((type) => <button type="button" role="menuitem" key={type} onClick={() => createArtifact(type)}><Icon name={type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type} size={16} />{t(TOOL_LABELS[type])}</button>)}</div>}
             </div>
           </div>
         </header>
         <div className={`main-content${selectedArtifact ? ' main-content--editor' : ''}${selectedArtifact?.type === 'table' ? ' main-content--table' : ''}${selectedArtifact?.type === 'document' ? ' main-content--document' : ''}`}>
-          {selectedArtifact ? <Suspense fallback={<div className="tool-empty" role="status">正在打开…</div>}>{renderArtifact()}</Suspense> : view === 'library' ? renderLibrary() : renderToolList(view)}
+          {selectedArtifact ? <Suspense fallback={<div className="tool-empty" role="status">{t('正在打开…')}</div>}>{renderArtifact()}</Suspense> : view === 'library' ? renderLibrary() : renderToolList(view)}
         </div>
       </main>
       {importOpen && <ArticleImportDialog onClose={() => setImportOpen(false)} onImport={importArticle} />}

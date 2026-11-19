@@ -1,4 +1,5 @@
 import Icon from './Icon'
+import { useI18n } from '../lib/i18n'
 
 export type ThemeMode = 'dark' | 'light'
 
@@ -8,14 +9,15 @@ type ThemeToggleButtonProps = {
 }
 
 function ThemeToggleButton({ theme, onToggle }: ThemeToggleButtonProps) {
-  const nextThemeLabel = theme === 'dark' ? '浅色模式' : '深色模式'
+  const { t } = useI18n()
+  const nextThemeLabel = t(theme === 'dark' ? '浅色模式' : '深色模式')
 
   return (
     <button
       className="theme-toggle"
       type="button"
-      aria-label={`切换到${nextThemeLabel}`}
-      title={`切换到${nextThemeLabel}`}
+      aria-label={`${t('切换到')} ${nextThemeLabel}`}
+      title={`${t('切换到')} ${nextThemeLabel}`}
       onClick={onToggle}
     >
       <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} />

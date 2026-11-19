@@ -4,6 +4,7 @@ import Markdown, { type ExtraProps } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import type { Plugin } from 'unified'
+import { useI18n } from '../lib/i18n'
 
 type HastNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
@@ -73,14 +74,16 @@ function stripLeadingText(node: ReactNode, remaining: { value: number }): ReactN
 
 function Callout({ kind, children }: { kind: keyof typeof calloutTypes; children: ReactNode }) {
   const callout = calloutTypes[kind]
+  const { t } = useI18n()
   return <aside className={`document-callout document-callout--${callout.tone}`}>
-    <div className="document-callout-title"><span aria-hidden="true">{callout.symbol}</span>{callout.label}</div>
+    <div className="document-callout-title"><span aria-hidden="true">{callout.symbol}</span>{t(callout.label)}</div>
     <div className="document-callout-content">{children}</div>
   </aside>
 }
 
 function CodeBlock({ language, source, children, interactive }: { language: string; source: string; children: ReactNode; interactive: boolean }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const { t } = useI18n()
   const resetTimer = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(resetTimer.current), [])
 
@@ -97,7 +100,7 @@ function CodeBlock({ language, source, children, interactive }: { language: stri
 
   const languageLabel = languageNames[language.toLowerCase()] ?? (language ? language.toUpperCase() : 'TEXT')
   return <div className="document-codeblock">
-    {interactive && <div className="document-codeblock-toolbar"><span>{languageLabel}</span><button type="button" onClick={() => void copy()}>{copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制代码'}</button></div>}
+    {interactive && <div className="document-codeblock-toolbar"><span>{languageLabel}</span><button type="button" onClick={() => void copy()}>{copyState === 'copied' ? t('已复制') : copyState === 'failed' ? t('复制失败') : t('复制代码')}</button></div>}
     <pre>{children}</pre>
   </div>
 }

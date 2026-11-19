@@ -1,6 +1,7 @@
 // Aeback article import — paste or open a local text file to create a graph.
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import Icon from './Icon'
+import { useI18n } from '../lib/i18n'
 
 type ArticleImportDialogProps = {
   onClose: () => void
@@ -8,6 +9,7 @@ type ArticleImportDialogProps = {
 }
 
 function ArticleImportDialog({ onClose, onImport }: ArticleImportDialogProps) {
+  const { t } = useI18n()
   const [title, setTitle] = useState('')
   const [text, setText] = useState('')
   const readFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -24,13 +26,13 @@ function ArticleImportDialog({ onClose, onImport }: ArticleImportDialogProps) {
   return (
     <div className="modal-scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="dialog-card article-dialog" role="dialog" aria-modal="true" aria-labelledby="article-dialog-title">
-        <div className="dialog-header"><h2 id="article-dialog-title">导入文章</h2><button className="icon-button" type="button" aria-label="关闭" onClick={onClose}><Icon name="close" size={17} /></button></div>
+        <div className="dialog-header"><h2 id="article-dialog-title">{t('导入文章')}</h2><button className="icon-button" type="button" aria-label={t('关闭')} onClick={onClose}><Icon name="close" size={17} /></button></div>
         <form onSubmit={submit}>
-          <label className="editor-label" htmlFor="article-title">标题</label>
+          <label className="editor-label" htmlFor="article-title">{t('标题')}</label>
           <input id="article-title" className="text-field" value={title} onChange={(event) => setTitle(event.target.value)} />
-          <label className="editor-label" htmlFor="article-content">文章</label>
+          <label className="editor-label" htmlFor="article-content">{t('文章')}</label>
           <textarea id="article-content" className="text-field article-textarea" value={text} onChange={(event) => setText(event.target.value)} />
-          <div className="dialog-footer"><label className="file-picker"><Icon name="document" size={15} />打开文件<input type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={readFile} /></label><button className="primary-button" type="submit" disabled={!text.trim()}>识别并生成图谱</button></div>
+          <div className="dialog-footer"><label className="file-picker"><Icon name="document" size={15} />{t('打开文件')}<input type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={readFile} /></label><button className="primary-button" type="submit" disabled={!text.trim()}>{t('识别并生成图谱')}</button></div>
         </form>
       </section>
     </div>

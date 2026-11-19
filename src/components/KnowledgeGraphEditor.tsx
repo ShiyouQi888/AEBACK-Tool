@@ -8,6 +8,7 @@ import { useCanvasController, useViewportSize } from '../lib/useCanvasController
 import { assertGraphProjectFileSize, createGraphProject, createGraphReport, createGraphSvg, parseGraphProject } from '../lib/graph-export'
 import { downloadCanvasRaster } from '../lib/canvas-export'
 import { downloadText, readTextFile } from '../lib/files'
+import { useI18n } from '../lib/i18n'
 import type { GraphArtifact, GraphLineStyle, KnowledgeEdge, KnowledgeNode, KnowledgeNodeKind, NodeColor } from '../types'
 
 type KnowledgeGraphEditorProps = {
@@ -182,6 +183,7 @@ function getGraphPath(start: { x: number; y: number }, end: { x: number; y: numb
 }
 
 function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportArticle, theme, onToggleTheme }: KnowledgeGraphEditorProps) {
+  const { t } = useI18n()
   const size = useViewportSize()
   const layoutBounds = useMemo(() => {
     const desktop = size.width > 680
@@ -196,7 +198,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const [selectedId, setSelectedId] = useState(root?.id ?? '')
   const [selectedEdgeId, setSelectedEdgeId] = useState('')
   const [targetId, setTargetId] = useState('')
-  const [edgeLabel, setEdgeLabel] = useState('相关')
+  const [edgeLabel, setEdgeLabel] = useState('')
   const [showSource, setShowSource] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -218,8 +220,8 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
     if (!query) return []
-    return artifact.nodes.filter((node) => [node.text, node.description ?? '', node.source ?? '', kindLabels[node.kind ?? 'concept']].join(' ').toLocaleLowerCase().includes(query))
-  }, [artifact.nodes, searchQuery])
+    return artifact.nodes.filter((node) => [node.text, node.description ?? '', node.source ?? '', t(kindLabels[node.kind ?? 'concept'])].join(' ').toLocaleLowerCase().includes(query))
+  }, [artifact.nodes, searchQuery, t])
   const fallbackPositions = useMemo(() => getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY, articleStructure), [nodeOrderKey, artifact.edges, artifact.rootId, layoutBounds, articleStructure])
   const positionFor = (node: KnowledgeNode) => ({ x: node.x ?? fallbackPositions.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallbackPositions.get(node.id)?.y ?? size.height / 2 })
   const moveNode = (id: string, x: number, y: number) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })
@@ -263,7 +265,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     canvas.fitBounds(bounds, layoutBounds.viewport)
   }, [artifact.id, size.height, size.width])
 
-  if (!rootNode) return <div className="canvas-empty">Aeback 图谱没有中心节点。</div>
+  if (!rootNode) return <div className="canvas-empty">{t('Aeback 图谱没有中心节点。')}</div>
 
   const addDirectionalNode = (parentId: string, side: KnowledgeSide) => {
     const parent = artifact.nodes.find((node) => node.id === parentId)
@@ -286,9 +288,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     }
     const parentIndex = artifact.nodes.indexOf(parent)
     const inheritedColor = parent.color ?? (parent.id === rootNode.id ? 'green' : palette[Math.max(0, parentIndex) % palette.length]?.value ?? 'blue')
-    const node: KnowledgeNode = { id: createId(), text: '新知识点', kind: 'concept', x, y, color: inheritedColor }
-    const relation = edgeLabel.trim() || '相关'
-    const edge: KnowledgeEdge = { id: createId(), fromId: parentId, toId: node.id, fromSide: side, label: relation, directed: relation !== '相关' }
+    const node: KnowledgeNode = { id: createId(), text: t('新知识点'), kind: 'concept', x, y, color: inheritedColor }
+    const relation = edgeLabel.trim() || t('相关')
+    const edge: KnowledgeEdge = { id: createId(), fromId: parentId, toId: node.id, fromSide: side, label: relation, directed: relation !== t('相关') }
     onChange({ ...artifact, nodes: [...artifact.nodes, node], edges: [...artifact.edges, edge] })
     setSelectedId(node.id)
     setSelectedEdgeId('')
@@ -301,9 +303,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     const source = nodeById.get(fromId)
     const target = nodeById.get(toId)
     if (!source || !target) return false
-    const relation = edgeLabel.trim() || '相关'
-    const existing = artifact.edges.find((edge) => (edge.label ?? '相关') === relation && (
-      relation === '相关'
+    const relation = edgeLabel.trim() || t('相关')
+    const existing = artifact.edges.find((edge) => (edge.label ?? t('相关')) === relation && (
+      relation === t('相关')
         ? (edge.fromId === fromId && edge.toId === toId) || (edge.fromId === toId && edge.toId === fromId)
         : edge.fromId === fromId && edge.toId === toId
     ))
@@ -312,7 +314,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
       setSelectedEdgeId(existing.id)
       return false
     }
-    const edge: KnowledgeEdge = { id: createId(), fromId, toId, fromSide, label: relation, directed: relation !== '相关' }
+    const edge: KnowledgeEdge = { id: createId(), fromId, toId, fromSide, label: relation, directed: relation !== t('相关') }
     onChange({ ...artifact, edges: [...artifact.edges, edge] })
     setSelectedId(fromId)
     setSelectedEdgeId(edge.id)
@@ -423,7 +425,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
 
   const matchesSearch = (node: KnowledgeNode) => {
     const query = searchQuery.trim().toLocaleLowerCase()
-    return !query || [node.text, node.description ?? '', node.source ?? '', kindLabels[node.kind ?? 'concept']].join(' ').toLocaleLowerCase().includes(query)
+    return !query || [node.text, node.description ?? '', node.source ?? '', t(kindLabels[node.kind ?? 'concept'])].join(' ').toLocaleLowerCase().includes(query)
   }
   const focusNode = (node: KnowledgeNode) => {
     setSelectedId(node.id)
@@ -465,9 +467,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     closeExportMenu()
     try {
       await downloadCanvasRaster(getExportSvg(), format, artifact.title)
-      setExportNotice(`${format.toUpperCase()} 已导出`)
+      setExportNotice(t('{format} 已导出', { format: format.toUpperCase() }))
     } catch (error) {
-      setExportNotice(error instanceof Error ? error.message : '图片导出失败')
+      setExportNotice(error instanceof Error ? t(error.message) : t('图片导出失败'))
     }
     window.setTimeout(() => setExportNotice(''), 3200)
   }
@@ -487,7 +489,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     try {
       assertGraphProjectFileSize(file)
       const project = parseGraphProject(JSON.parse(await readTextFile(file)))
-      if (!window.confirm(`导入「${project.title}」并替换当前知识图谱？`)) return
+      if (!window.confirm(t('导入「{title}」并替换当前知识图谱？', { title: project.title }))) return
       const replacement = { ...project, id: artifact.id, updatedAt: new Date().toISOString() }
       onChange(replacement)
       setSelectedId(project.rootId)
@@ -506,9 +508,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         return { minX: Math.min(current.minX, point.x - radius), minY: Math.min(current.minY, point.y - radius), maxX: Math.max(current.maxX, point.x + radius), maxY: Math.max(current.maxY, point.y + radius) }
       }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
       canvas.fitBounds(bounds, layoutBounds.viewport)
-      setExportNotice('工程已导入')
+      setExportNotice(t('工程已导入'))
     } catch (error) {
-      setExportNotice(error instanceof Error ? error.message : '工程导入失败')
+      setExportNotice(error instanceof Error ? t(error.message) : t('工程导入失败'))
     } finally {
       input.value = ''
       window.setTimeout(() => setExportNotice(''), 4000)
@@ -522,7 +524,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         className="full-canvas"
         viewBox={`0 0 ${size.width} ${size.height}`}
         preserveAspectRatio="none"
-        aria-label={`${artifact.title} 知识图谱画布`}
+        aria-label={`${artifact.title} ${t('知识图谱画布')}`}
         onPointerDown={canvas.startPan}
         onPointerMove={updateConnectionDrag}
         onPointerUp={finishConnectionDrag}
@@ -548,9 +550,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const path = getGraphPath(start, end, connectionStyle)
             const sourceColor = fromNode.color ?? (fromNode.id === rootNode.id ? 'green' : palette[(nodeIndexById.get(fromNode.id) ?? 0) % palette.length]?.value ?? 'blue')
             const dimmed = Boolean(searchQuery.trim() && !matchesSearch(fromNode) && !matchesSearch(toNode))
-            return <g key={edge.id} className={`graph-link graph-link--${sourceColor}${edge.directed ? ' graph-link--directed' : ''}${selectedEdgeId === edge.id ? ' graph-link--selected' : ''}${dimmed ? ' graph-link--dimmed' : ''}`} role="button" tabIndex={0} aria-label={`关系：${fromNode.text} ${edge.label ?? '相关'} ${toNode.text}`} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) } if (event.key === 'Delete') removeConnection(edge.id) }}>
+            return <g key={edge.id} className={`graph-link graph-link--${sourceColor}${edge.directed ? ' graph-link--directed' : ''}${selectedEdgeId === edge.id ? ' graph-link--selected' : ''}${dimmed ? ' graph-link--dimmed' : ''}`} role="button" tabIndex={0} aria-label={`${t('关系：')} ${fromNode.text} ${t(edge.label ?? '相关')} ${toNode.text}`} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) } if (event.key === 'Delete') removeConnection(edge.id) }}>
               <path d={path} markerEnd={edge.directed ? 'url(#aeback-knowledge-arrow)' : undefined} />
-              {(canvas.camera.zoom >= .82 || selectedEdgeId === edge.id) && <text x={midpointX} y={midpointY - 7 - (index % 2) * 4} textAnchor="middle">{edge.label ?? '相关'}</text>}
+              {(canvas.camera.zoom >= .82 || selectedEdgeId === edge.id) && <text x={midpointX} y={midpointY - 7 - (index % 2) * 4} textAnchor="middle">{t(edge.label ?? '相关')}</text>}
             </g>
           })}
           {connectionPreview && (() => {
@@ -576,68 +578,68 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const kindFontSize = Math.max(6, 9 * half.width / 70)
             const maxLabelChars = Math.max(3, Math.floor(half.width * 1.75 / titleFontSize))
             const sidePoints: Record<KnowledgeSide, { x: number; y: number }> = { up: { x: 0, y: -half.height }, right: { x: half.width, y: 0 }, down: { x: 0, y: half.height }, left: { x: -half.width, y: 0 } }
-            return <g key={node.id} id={`knowledge-node-${node.id}`} data-node-id={node.id} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}${connectionPreview?.targetId === node.id ? ' knowledge-node--connection-target' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`编辑${kindLabels[nodeKind]}节点：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
+            return <g key={node.id} id={`knowledge-node-${node.id}`} data-node-id={node.id} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}${connectionPreview?.targetId === node.id ? ' knowledge-node--connection-target' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`${t('编辑')}${t(kindLabels[nodeKind])}${t('节点')}：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
               <title>{node.text}</title>
               <circle className="knowledge-node-halo" r={half.width + 9} />
             <circle className={`knowledge-node-shape ${central ? 'knowledge-node-shape--root' : 'knowledge-node-shape--leaf'}`} r={half.width} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               <text className="canvas-node-label knowledge-node-title" x="0" y="-2" textAnchor="middle" style={{ fontSize: titleFontSize }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>
-              <text className="knowledge-node-kind" x="0" y={titleFontSize * 1.42} textAnchor="middle" style={{ fontSize: kindFontSize }}>{kindLabels[nodeKind]}</text>
-              {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={`点击在${sideLabels[side]}添加节点；拖动到其他节点建立关系`} onPointerDown={(event) => beginConnectionDrag(event, node, side)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (suppressAddHandleClickRef.current) { suppressAddHandleClickRef.current = false; return } addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><title>{`点击在${sideLabels[side]}添加节点；拖动到其他节点建立关系`}</title><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}
+              <text className="knowledge-node-kind" x="0" y={titleFontSize * 1.42} textAnchor="middle" style={{ fontSize: kindFontSize }}>{t(kindLabels[nodeKind])}</text>
+              {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={t('点击在{side}添加节点；拖动到其他节点建立关系', { side: t(sideLabels[side]) })} onPointerDown={(event) => beginConnectionDrag(event, node, side)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (suppressAddHandleClickRef.current) { suppressAddHandleClickRef.current = false; return } addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><title>{t('点击在{side}添加节点；拖动到其他节点建立关系', { side: t(sideLabels[side]) })}</title><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}
             </g>
           })}
         </g>
       </svg>
 
       <CanvasHeader title={artifact.title} onTitleChange={(title) => onChange({ ...artifact, title })} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme}>
-        <button className="canvas-header-action" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>
+        <button className="canvas-header-action" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />{t('导入文章')}</button>
         <details className="canvas-export-menu" ref={exportMenuRef}>
-          <summary className="canvas-header-action" aria-label="导出或导入知识图谱"><Icon name="download" size={15} /><span>导出</span></summary>
+          <summary className="canvas-header-action" aria-label={t('导出或导入知识图谱')}><Icon name="download" size={15} /><span>{t('导出')}</span></summary>
           <div className="canvas-export-dropdown">
-            <button type="button" onClick={() => void exportRaster('png')}>导出 PNG 图片</button>
-            <button type="button" onClick={() => void exportRaster('jpg')}>导出 JPG 图片</button>
-            <button type="button" onClick={exportSvg}>导出 SVG 矢量图</button>
-            <button type="button" onClick={exportProject}>导出 Aeback 工程</button>
-            <button type="button" onClick={exportReport}>导出 Markdown 报告</button>
+            <button type="button" onClick={() => void exportRaster('png')}>{t('导出 PNG 图片')}</button>
+            <button type="button" onClick={() => void exportRaster('jpg')}>{t('导出 JPG 图片')}</button>
+            <button type="button" onClick={exportSvg}>{t('导出 SVG 矢量图')}</button>
+            <button type="button" onClick={exportProject}>{t('导出 Aeback 工程')}</button>
+            <button type="button" onClick={exportReport}>{t('导出 Markdown 报告')}</button>
             <div className="canvas-export-divider" />
-            <button type="button" onClick={() => projectFileRef.current?.click()}>导入 Aeback 工程</button>
-            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label="选择 Aeback 知识图谱工程" onChange={(event) => void importProject(event)} />
+            <button type="button" onClick={() => projectFileRef.current?.click()}>{t('导入 Aeback 工程')}</button>
+            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label={t('选择 Aeback 知识图谱工程')} onChange={(event) => void importProject(event)} />
           </div>
         </details>
-        <button className="canvas-header-primary" type="button" onClick={addNode}><Icon name="plus" size={15} />关联节点</button>
+        <button className="canvas-header-primary" type="button" onClick={addNode}><Icon name="plus" size={15} />{t('关联节点')}</button>
       </CanvasHeader>
       {exportNotice && <div className="canvas-export-status" role="status">{exportNotice}</div>}
-      <div className="canvas-tool-rail graph-tool-rail" role="toolbar" aria-label="知识图谱工具">
-        <div className="graph-tool-group" role="group" aria-label="节点操作">
-          <button className="canvas-tool-primary" type="button" aria-label="添加关联节点" title="添加关联节点" onClick={addNode}><Icon name="plus" size={18} /></button>
-          <div className="canvas-search-control"><button className={`direction-button${searchOpen ? ' direction-button--active' : ''}`} type="button" aria-label="搜索节点" aria-expanded={searchOpen} title="搜索节点" onClick={() => { setSearchOpen((open) => !open); setSearchQuery(''); setSearchMatchIndex(-1) }}><Icon name="search" size={16} /></button>{searchOpen && <div className="graph-search-panel"><input className="graph-search-input" autoFocus aria-label="搜索知识节点" placeholder="搜索节点" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); focusSearchResult(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); setSearchMatchIndex(-1) } }} /><div><button type="button" aria-label="上一个搜索结果" disabled={!searchResults.length} onClick={() => focusSearchResult(-1)}>↑</button><span>{searchResults.length ? `${searchMatchIndex < 0 ? 0 : searchMatchIndex + 1} / ${searchResults.length}` : '0 个结果'}</span><button type="button" aria-label="下一个搜索结果" disabled={!searchResults.length} onClick={() => focusSearchResult(1)}>↓</button></div></div>}</div>
-          {selected?.id !== rootNode.id && <button className="direction-button graph-tool-danger" type="button" aria-label="删除选中节点" title="删除选中节点" onClick={deleteNode}><Icon name="trash" size={16} /></button>}
+      <div className="canvas-tool-rail graph-tool-rail" role="toolbar" aria-label={t('知识图谱工具')}>
+        <div className="graph-tool-group" role="group" aria-label={t('节点操作')}>
+          <button className="canvas-tool-primary" type="button" aria-label={t('添加关联节点')} title={t('添加关联节点')} onClick={addNode}><Icon name="plus" size={18} /></button>
+          <div className="canvas-search-control"><button className={`direction-button${searchOpen ? ' direction-button--active' : ''}`} type="button" aria-label={t('搜索节点')} aria-expanded={searchOpen} title={t('搜索节点')} onClick={() => { setSearchOpen((open) => !open); setSearchQuery(''); setSearchMatchIndex(-1) }}><Icon name="search" size={16} /></button>{searchOpen && <div className="graph-search-panel"><input className="graph-search-input" autoFocus aria-label={t('搜索知识节点')} placeholder={t('搜索节点')} value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); focusSearchResult(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); setSearchMatchIndex(-1) } }} /><div><button type="button" aria-label={t('上一个搜索结果')} disabled={!searchResults.length} onClick={() => focusSearchResult(-1)}>↑</button><span>{searchResults.length ? `${searchMatchIndex < 0 ? 0 : searchMatchIndex + 1} / ${searchResults.length}` : t('0 个结果')}</span><button type="button" aria-label={t('下一个搜索结果')} disabled={!searchResults.length} onClick={() => focusSearchResult(1)}>↓</button></div></div>}</div>
+          {selected?.id !== rootNode.id && <button className="direction-button graph-tool-danger" type="button" aria-label={t('删除选中节点')} title={t('删除选中节点')} onClick={deleteNode}><Icon name="trash" size={16} /></button>}
         </div>
         <div className="canvas-tool-separator" />
-        <div className="graph-tool-group graph-line-style-controls" role="group" aria-label="关系线样式">{lineStyles.map(({ value, label, icon }) => <button className={`direction-button${connectionStyle === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={label} title={label} aria-pressed={connectionStyle === value} onClick={() => setConnectionStyle(value)}><Icon name={icon} size={16} /></button>)}</div>
+        <div className="graph-tool-group graph-line-style-controls" role="group" aria-label={t('关系线样式')}>{lineStyles.map(({ value, label, icon }) => <button className={`direction-button${connectionStyle === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={t(label)} title={t(label)} aria-pressed={connectionStyle === value} onClick={() => setConnectionStyle(value)}><Icon name={icon} size={16} /></button>)}</div>
         <div className="canvas-tool-separator" />
-        <div className="graph-tool-group" role="group" aria-label="画布布局"><button className="direction-button" type="button" aria-label="有序整理图谱节点" title="有序整理" onClick={arrangeGraph}><Icon name="arrange" size={16} /></button></div>
+        <div className="graph-tool-group" role="group" aria-label={t('画布布局')}><button className="direction-button" type="button" aria-label={t('有序整理图谱节点')} title={t('有序整理')} onClick={arrangeGraph}><Icon name="arrange" size={16} /></button></div>
       </div>
-      <div className="canvas-zoom" role="toolbar" aria-label="画布缩放"><button type="button" aria-label="放大" onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label="缩小" onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label="有序整理视图" title="有序整理布局" onClick={arrangeGraph}><Icon name="grid" size={15} /></button><i /><span className="canvas-node-count">{artifact.nodes.length} 节点 · {artifact.edges.length} 关系</span></div>
-      {selected && <aside className="canvas-inspector" aria-label="图谱节点属性">
-        <div className="canvas-inspector-heading"><span>节点</span><div className="canvas-inspector-actions"><button type="button" aria-label="定位节点" title="定位节点" onClick={fitSelected}><Icon name="mindmap" size={15} /></button>{selected.id !== rootNode.id && <button type="button" aria-label="删除节点" title="删除节点" onClick={deleteNode}><Icon name="trash" size={15} /></button>}</div></div>
-        <label className="canvas-label" htmlFor="graph-node-name">名称</label>
+      <div className="canvas-zoom" role="toolbar" aria-label={t('画布缩放')}><button type="button" aria-label={t('放大')} onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label={t('缩小')} onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label={t('有序整理视图')} title={t('有序整理布局')} onClick={arrangeGraph}><Icon name="grid" size={15} /></button><i /><span className="canvas-node-count">{t('{count} 节点 · {relations} 关系', { count: artifact.nodes.length, relations: artifact.edges.length })}</span></div>
+      {selected && <aside className="canvas-inspector" aria-label={t('图谱节点属性')}>
+        <div className="canvas-inspector-heading"><span>{t('节点')}</span><div className="canvas-inspector-actions"><button type="button" aria-label={t('定位节点')} title={t('定位节点')} onClick={fitSelected}><Icon name="mindmap" size={15} /></button>{selected.id !== rootNode.id && <button type="button" aria-label={t('删除节点')} title={t('删除节点')} onClick={deleteNode}><Icon name="trash" size={15} /></button>}</div></div>
+        <label className="canvas-label" htmlFor="graph-node-name">{t('名称')}</label>
         <input id="graph-node-name" value={selected.text} onChange={(event) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, text: event.target.value } : node) })} />
-        <label className="canvas-label" htmlFor="graph-node-kind">类型</label>
-        <select id="graph-node-kind" value={selected.kind ?? (selected.id === rootNode.id ? 'concept' : 'idea')} onChange={(event) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, kind: event.target.value as KnowledgeNodeKind } : node) })}>{nodeKinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select>
-        <label className="canvas-label" htmlFor="graph-node-description">说明</label>
-        <textarea id="graph-node-description" className="canvas-textarea" value={selected.description ?? ''} placeholder="补充节点说明" onChange={(event) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, description: event.target.value } : node) })} />
-        {selected.source && <div className="knowledge-evidence"><span>来源摘录</span><p>{selected.source}</p></div>}
-        <span className="canvas-label">节点颜色</span>
-        <div className="color-palette" role="group" aria-label="节点颜色">{palette.map((color) => <button className={`color-swatch color-swatch--${color.value}${selectedColor === color.value ? ' color-swatch--selected' : ''}`} type="button" key={color.value} aria-label={color.label} aria-pressed={selectedColor === color.value} title={color.label} onClick={() => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, color: color.value } : node) })} />)}</div>
-        <label className="canvas-label canvas-opacity-label" htmlFor="graph-node-opacity"><span>填充透明度</span><output htmlFor="graph-node-opacity">{selected.opacity ?? 100}%</output></label>
-        <input className="canvas-opacity-slider" id="graph-node-opacity" type="range" min="0" max="100" step="5" value={selected.opacity ?? 100} aria-label="节点填充透明度" onChange={(event) => { const opacity = Number(event.target.value); onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, opacity } : node) }) }} />
-        <label className="canvas-label" htmlFor="graph-edge-target">新建关系</label>
-        <div className="canvas-connect-row"><select id="graph-edge-target" value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">选择节点</option>{artifact.nodes.filter((node) => node.id !== selected.id).map((node) => <option key={node.id} value={node.id}>{node.text}</option>)}</select><input aria-label="关系名称" list="knowledge-relation-options" value={edgeLabel} onChange={(event) => setEdgeLabel(event.target.value)} /><datalist id="knowledge-relation-options">{edgeLabels.map((label) => <option key={label} value={label} />)}</datalist><button type="button" aria-label="连接节点" title="连接节点" disabled={!targetId} onClick={addConnection}><Icon name="arrow" size={15} /></button></div>
-        {connections.length > 0 && <div className="canvas-connections"><span className="canvas-label">关联关系</span>{connections.map((edge) => { const otherId = edge.fromId === selected.id ? edge.toId : edge.fromId; const other = nodeById.get(otherId); return <div className={`canvas-connection-row${selectedEdgeId === edge.id ? ' canvas-connection-row--selected' : ''}`} key={edge.id}><span title={other?.text}>{other?.text ?? '节点'}</span><input className="canvas-connection-label" aria-label={`关系名称：${other?.text ?? '节点'}`} value={edge.label ?? '相关'} onFocus={() => setSelectedEdgeId(edge.id)} onChange={(event) => updateEdge(edge.id, { label: event.target.value })} /><button type="button" className={`canvas-edge-direction${edge.directed ? ' canvas-edge-direction--active' : ''}`} aria-label={edge.directed ? '改为无向关系' : '改为有向关系'} aria-pressed={Boolean(edge.directed)} title={edge.directed ? '有向关系' : '无向关系'} onClick={() => updateEdge(edge.id, { directed: !edge.directed })}><Icon name="arrow" size={13} /></button><button type="button" aria-label="删除关系" title="删除关系" onClick={() => removeConnection(edge.id)}><Icon name="close" size={13} /></button></div> })}</div>}
-        {artifact.sourceText && <button className="canvas-source-toggle" type="button" aria-expanded={showSource} onClick={() => setShowSource((value) => !value)}>{showSource ? '收起原文' : '查看原文'}</button>}
+        <label className="canvas-label" htmlFor="graph-node-kind">{t('类型')}</label>
+        <select id="graph-node-kind" value={selected.kind ?? (selected.id === rootNode.id ? 'concept' : 'idea')} onChange={(event) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, kind: event.target.value as KnowledgeNodeKind } : node) })}>{nodeKinds.map((kind) => <option key={kind.value} value={kind.value}>{t(kind.label)}</option>)}</select>
+        <label className="canvas-label" htmlFor="graph-node-description">{t('说明')}</label>
+        <textarea id="graph-node-description" className="canvas-textarea" value={selected.description ?? ''} placeholder={t('补充节点说明')} onChange={(event) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, description: event.target.value } : node) })} />
+        {selected.source && <div className="knowledge-evidence"><span>{t('来源摘录')}</span><p>{selected.source}</p></div>}
+        <span className="canvas-label">{t('节点颜色')}</span>
+        <div className="color-palette" role="group" aria-label={t('节点颜色')}>{palette.map((color) => <button className={`color-swatch color-swatch--${color.value}${selectedColor === color.value ? ' color-swatch--selected' : ''}`} type="button" key={color.value} aria-label={t(color.label)} aria-pressed={selectedColor === color.value} title={t(color.label)} onClick={() => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, color: color.value } : node) })} />)}</div>
+        <label className="canvas-label canvas-opacity-label" htmlFor="graph-node-opacity"><span>{t('填充透明度')}</span><output htmlFor="graph-node-opacity">{selected.opacity ?? 100}%</output></label>
+        <input className="canvas-opacity-slider" id="graph-node-opacity" type="range" min="0" max="100" step="5" value={selected.opacity ?? 100} aria-label={t('节点填充透明度')} onChange={(event) => { const opacity = Number(event.target.value); onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, opacity } : node) }) }} />
+        <label className="canvas-label" htmlFor="graph-edge-target">{t('新建关系')}</label>
+        <div className="canvas-connect-row"><select id="graph-edge-target" value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">{t('选择节点')}</option>{artifact.nodes.filter((node) => node.id !== selected.id).map((node) => <option key={node.id} value={node.id}>{node.text}</option>)}</select><input aria-label={t('关系名称')} list="knowledge-relation-options" value={edgeLabel} placeholder={t('相关')} onChange={(event) => setEdgeLabel(event.target.value)} /><datalist id="knowledge-relation-options">{edgeLabels.map((label) => <option key={label} value={t(label)} />)}</datalist><button type="button" aria-label={t('连接节点')} title={t('连接节点')} disabled={!targetId} onClick={addConnection}><Icon name="arrow" size={15} /></button></div>
+        {connections.length > 0 && <div className="canvas-connections"><span className="canvas-label">{t('关联关系')}</span>{connections.map((edge) => { const otherId = edge.fromId === selected.id ? edge.toId : edge.fromId; const other = nodeById.get(otherId); return <div className={`canvas-connection-row${selectedEdgeId === edge.id ? ' canvas-connection-row--selected' : ''}`} key={edge.id}><span title={other?.text}>{other?.text ?? t('节点')}</span><input className="canvas-connection-label" aria-label={`${t('关系名称')}: ${other?.text ?? t('节点')}`} value={edge.label ?? t('相关')} onFocus={() => setSelectedEdgeId(edge.id)} onChange={(event) => updateEdge(edge.id, { label: event.target.value })} /><button type="button" className={`canvas-edge-direction${edge.directed ? ' canvas-edge-direction--active' : ''}`} aria-label={t(edge.directed ? '改为无向关系' : '改为有向关系')} aria-pressed={Boolean(edge.directed)} title={t(edge.directed ? '有向关系' : '无向关系')} onClick={() => updateEdge(edge.id, { directed: !edge.directed })}><Icon name="arrow" size={13} /></button><button type="button" aria-label={t('删除关系')} title={t('删除关系')} onClick={() => removeConnection(edge.id)}><Icon name="close" size={13} /></button></div> })}</div>}
+        {artifact.sourceText && <button className="canvas-source-toggle" type="button" aria-expanded={showSource} onClick={() => setShowSource((value) => !value)}>{t(showSource ? '收起原文' : '查看原文')}</button>}
       </aside>}
-      {showSource && artifact.sourceText && <section className="canvas-source-panel"><header><span>导入原文</span><button type="button" aria-label="关闭原文" onClick={() => setShowSource(false)}><Icon name="close" size={15} /></button></header><p>{artifact.sourceText}</p></section>}
-      <div className="canvas-help">拖动节点 · 拖动加号连接 · 空白处平移 · 滚轮缩放</div>
+      {showSource && artifact.sourceText && <section className="canvas-source-panel"><header><span>{t('导入原文')}</span><button type="button" aria-label={t('关闭原文')} onClick={() => setShowSource(false)}><Icon name="close" size={15} /></button></header><p>{artifact.sourceText}</p></section>}
+      <div className="canvas-help">{t('拖动节点 · 拖动加号连接 · 空白处平移 · 滚轮缩放')}</div>
       {importOpen && <ArticleImportDialog onClose={() => setImportOpen(false)} onImport={(title, text) => { setImportOpen(false); onImportArticle(title, text) }} />}
     </div>
   )

@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { DocumentArtifact } from '../types'
 import { downloadText, readTextFile } from '../lib/files'
+import { useI18n } from '../lib/i18n'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
 import MarkdownContent from './MarkdownContent'
 import { documentOutline } from '../lib/document'
@@ -16,6 +17,7 @@ const codeLanguages = [
 ]
 
 function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
+  const { t, locale } = useI18n()
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
@@ -59,7 +61,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     mirror.remove()
   })
   const editable = () => { if (view === 'preview') setView('edit') }
-  const wrap = (before: string, after = before, placeholder = '文字') => {
+  const wrap = (before: string, after = before, placeholder = t('文字')) => {
     editable()
     const editor = editorRef.current
     const start = editor?.selectionStart ?? artifact.content.length
@@ -73,7 +75,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     const editor = editorRef.current
     const start = editor?.selectionStart ?? artifact.content.length
     const end = editor?.selectionEnd ?? start
-    const selected = artifact.content.slice(start, end) || '代码'
+    const selected = artifact.content.slice(start, end) || t('代码')
     const prefix = start > 0 && artifact.content[start - 1] !== '\n' ? '\n' : ''
     const suffix = end >= artifact.content.length || artifact.content[end] !== '\n' ? '\n' : ''
     const opening = `${prefix}\`\`\`${language}\n`
@@ -86,7 +88,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     const editor = editorRef.current
     const start = editor?.selectionStart ?? artifact.content.length
     const end = editor?.selectionEnd ?? start
-    const selected = artifact.content.slice(start, end) || '在此输入内容'
+    const selected = artifact.content.slice(start, end) || t('在此输入内容')
     const before = artifact.content.slice(0, start)
     const after = artifact.content.slice(end)
     const leading = before && !before.endsWith('\n') ? '\n' : ''
@@ -144,7 +146,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
       let content = artifact.content
       for (let index = matches.length - 1; index >= 0; index -= 1) content = content.slice(0, matches[index]) + replacement + content.slice(matches[index] + query.length)
       update(content)
-      setMessage(`已替换 ${matches.length} 处`)
+      setMessage(t('已替换 {count} 处', { count: matches.length }))
       setMatchIndex(-1)
     } else {
       const index = matches[matchIndex < 0 ? 0 : matchIndex % matches.length]
@@ -162,7 +164,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     const exportedHtml = html.replace('</style>', `${calloutCss}</style>`)
     if (!print) { downloadText(artifact.title, 'html', exportedHtml, 'text/html;charset=utf-8'); return }
     const frame = document.createElement('iframe')
-    frame.title = 'Aeback 文档打印'
+    frame.title = t('Aeback 文档打印')
     frame.style.cssText = 'position:fixed;width:0;height:0;border:0'
     frame.onload = () => { frame.contentWindow?.focus(); frame.contentWindow?.print(); window.setTimeout(() => frame.remove(), 60000) }
     frame.srcdoc = exportedHtml
@@ -203,9 +205,9 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
         if (key === 'y') history.redo()
         if (key === 'b') wrap('**')
         if (key === 'i') wrap('*')
-        if (key === 'k') wrap('[', '](https://)', '链接文字')
+        if (key === 'k') wrap('[', '](https://)', t('链接文字'))
         if (key === 'f') { setFindOpen(true); requestAnimationFrame(() => findRef.current?.focus()) }
-        if (key === 's') setMessage('正文会自动保存到本地')
+        if (key === 's') setMessage(t('正文会自动保存到本地'))
       }
     }
   }
@@ -213,36 +215,36 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
   return <section className="document-editor-shell aeback-document" onKeyDown={onKeyDown}>
     <div className="editor-commandbar">
       <div className="editor-command-group">
-        <button className={`tool-button${showOutline ? ' tool-button--active' : ''}`} type="button" aria-label="文档大纲" aria-pressed={showOutline} onClick={() => setShowOutline((value) => !value)}><Icon name="list" size={16} /></button>
-        <button className="tool-button" type="button" aria-label="撤销" title="撤销 Ctrl+Z" disabled={!history.canUndo} onClick={() => { history.undo(); setMessage('') }}><Icon name="undo" size={16} /></button>
-        <button className="tool-button" type="button" aria-label="重做" title="重做 Ctrl+Shift+Z" disabled={!history.canRedo} onClick={() => { history.redo(); setMessage('') }}><Icon name="redo" size={16} /></button>
-        <button className="tool-button" type="button" aria-label="查找替换" title="查找替换 Ctrl+F" aria-expanded={findOpen} onClick={() => { setFindOpen((value) => !value); requestAnimationFrame(() => findRef.current?.focus()) }}><Icon name="search" size={16} /></button>
+        <button className={`tool-button${showOutline ? ' tool-button--active' : ''}`} type="button" aria-label={t('文档大纲')} aria-pressed={showOutline} onClick={() => setShowOutline((value) => !value)}><Icon name="list" size={16} /></button>
+        <button className="tool-button" type="button" aria-label={t('撤销')} title={`${t('撤销')} Ctrl+Z`} disabled={!history.canUndo} onClick={() => { history.undo(); setMessage('') }}><Icon name="undo" size={16} /></button>
+        <button className="tool-button" type="button" aria-label={t('重做')} title={`${t('重做')} Ctrl+Shift+Z`} disabled={!history.canRedo} onClick={() => { history.redo(); setMessage('') }}><Icon name="redo" size={16} /></button>
+        <button className="tool-button" type="button" aria-label={t('查找替换')} title={`${t('查找替换')} Ctrl+F`} aria-expanded={findOpen} onClick={() => { setFindOpen((value) => !value); requestAnimationFrame(() => findRef.current?.focus()) }}><Icon name="search" size={16} /></button>
       </div>
-      <div className="editor-segmented" role="group" aria-label="文档视图">{([{ id: 'edit', label: '编辑' }, { id: 'split', label: '分屏' }, { id: 'preview', label: '阅读' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>{item.label}</button>)}</div>
+      <div className="editor-segmented" role="group" aria-label={t('文档视图')}>{([{ id: 'edit', label: '编辑' }, { id: 'split', label: '分屏' }, { id: 'preview', label: '阅读' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>{t(item.label)}</button>)}</div>
       <div className="editor-command-group">
-        <button className="tool-button" type="button" onClick={() => importRef.current?.click()}>导入</button>
-        <details className="editor-menu"><summary>导出</summary><div><button type="button" onClick={() => downloadText(artifact.title, 'md', artifact.content, 'text/markdown;charset=utf-8')}>Markdown</button><button type="button" onClick={() => void exportHtml()}>HTML</button><button type="button" onClick={() => void exportHtml(true)}>打印 / PDF</button></div></details>
+        <button className="tool-button" type="button" onClick={() => importRef.current?.click()}>{t('导入')}</button>
+        <details className="editor-menu"><summary>{t('导出')}</summary><div><button type="button" onClick={() => downloadText(artifact.title, 'md', artifact.content, 'text/markdown;charset=utf-8')}>Markdown</button><button type="button" onClick={() => void exportHtml()}>HTML</button><button type="button" onClick={() => void exportHtml(true)}>{t('打印 / PDF')}</button></div></details>
       </div>
     </div>
-    {view !== 'preview' && <div className="document-formatbar" role="toolbar" aria-label="文字格式">
-      <button type="button" title="一级标题" onClick={() => prefixLines('# ')}>H1</button><button type="button" title="二级标题" onClick={() => prefixLines('## ')}>H2</button><button type="button" aria-label="加粗" title="加粗 Ctrl+B" onClick={() => wrap('**')}><b>B</b></button><button type="button" aria-label="斜体" title="斜体 Ctrl+I" onClick={() => wrap('*')}><i>I</i></button><button type="button" aria-label="删除线" title="删除线" onClick={() => wrap('~~')}><s>S</s></button><button type="button" aria-label="行内代码" title="行内代码" onClick={() => wrap('`', '`', '代码')}>{'`</>'}</button><span />
-      <button type="button" aria-label="无序列表" title="无序列表" onClick={() => prefixLines('- ')}><Icon name="list" size={16} /></button><button type="button" aria-label="有序列表" title="有序列表" onClick={() => prefixLines('1. ')}>1.</button><button type="button" aria-label="任务列表" title="任务列表" onClick={() => prefixLines('- [ ] ')}>☐</button><button type="button" aria-label="引用" title="引用" onClick={() => prefixLines('> ')}>❞</button>
-      <details className="editor-menu document-callout-menu"><summary aria-label="插入提示块" title="提示块">▤</summary><div>{([{ kind: 'NOTE', label: '说明块' }, { kind: 'TIP', label: '提示块' }, { kind: 'IMPORTANT', label: '重点块' }, { kind: 'WARNING', label: '警告块' }, { kind: 'CAUTION', label: '注意块' }, { kind: 'SUCCESS', label: '完成块' }] as const).map((item) => <button key={item.kind} type="button" onClick={(event) => { insertCallout(item.kind); event.currentTarget.closest('details')?.removeAttribute('open') }}>{item.label}</button>)}</div></details>
-      <button type="button" aria-label="高亮文字" title="高亮文字" onClick={() => wrap('==', '==', '重点内容')}>▰</button><button type="button" aria-label="插入链接" title="链接 Ctrl+K" onClick={() => wrap('[', '](https://)', '链接文字')}>↗</button><details className="editor-menu document-code-menu"><summary aria-label="插入代码块" title="代码块">{'</>'}</summary><div>{codeLanguages.map((language) => <button key={language.label} type="button" onClick={(event) => { insertCodeBlock(language.id); event.currentTarget.closest('details')?.removeAttribute('open') }}>{language.label}</button>)}</div></details><button type="button" aria-label="插入表格" title="插入表格" onClick={() => insertBlock('| 列名 | 列名 |\n| --- | --- |\n| 内容 | 内容 |')}><Icon name="table" size={16} /></button><button type="button" aria-label="分隔线" title="分隔线" onClick={() => insertBlock('---')}>―</button>
+    {view !== 'preview' && <div className="document-formatbar" role="toolbar" aria-label={t('文字格式')}>
+      <button type="button" title={t('一级标题')} onClick={() => prefixLines('# ')}>H1</button><button type="button" title={t('二级标题')} onClick={() => prefixLines('## ')}>H2</button><button type="button" aria-label={t('加粗')} title={`${t('加粗')} Ctrl+B`} onClick={() => wrap('**')}><b>B</b></button><button type="button" aria-label={t('斜体')} title={`${t('斜体')} Ctrl+I`} onClick={() => wrap('*')}><i>I</i></button><button type="button" aria-label={t('删除线')} title={t('删除线')} onClick={() => wrap('~~')}><s>S</s></button><button type="button" aria-label={t('行内代码')} title={t('行内代码')} onClick={() => wrap('`', '`', t('代码'))}>{'`</>'}</button><span />
+      <button type="button" aria-label={t('无序列表')} title={t('无序列表')} onClick={() => prefixLines('- ')}><Icon name="list" size={16} /></button><button type="button" aria-label={t('有序列表')} title={t('有序列表')} onClick={() => prefixLines('1. ')}>1.</button><button type="button" aria-label={t('任务列表')} title={t('任务列表')} onClick={() => prefixLines('- [ ] ')}>☐</button><button type="button" aria-label={t('引用')} title={t('引用')} onClick={() => prefixLines('> ')}>❞</button>
+      <details className="editor-menu document-callout-menu"><summary aria-label={t('插入提示块')} title={t('提示块')}>▤</summary><div>{([{ kind: 'NOTE', label: '说明块' }, { kind: 'TIP', label: '提示块' }, { kind: 'IMPORTANT', label: '重点块' }, { kind: 'WARNING', label: '警告块' }, { kind: 'CAUTION', label: '注意块' }, { kind: 'SUCCESS', label: '完成块' }] as const).map((item) => <button key={item.kind} type="button" onClick={(event) => { insertCallout(item.kind); event.currentTarget.closest('details')?.removeAttribute('open') }}>{t(item.label)}</button>)}</div></details>
+      <button type="button" aria-label={t('高亮文字')} title={t('高亮文字')} onClick={() => wrap('==', '==', t('重点内容'))}>▰</button><button type="button" aria-label={t('插入链接')} title={`${t('链接')} Ctrl+K`} onClick={() => wrap('[', '](https://)', t('链接文字'))}>↗</button><details className="editor-menu document-code-menu"><summary aria-label={t('插入代码块')} title={t('代码块')}>{'</>'}</summary><div>{codeLanguages.map((language) => <button key={language.label} type="button" onClick={(event) => { insertCodeBlock(language.id); event.currentTarget.closest('details')?.removeAttribute('open') }}>{t(language.label)}</button>)}</div></details><button type="button" aria-label={t('插入表格')} title={t('插入表格')} onClick={() => insertBlock('| 列名 | 列名 |\n| --- | --- |\n| 内容 | 内容 |')}><Icon name="table" size={16} /></button><button type="button" aria-label={t('分隔线')} title={t('分隔线')} onClick={() => insertBlock('---')}>―</button>
     </div>}
-    {findOpen && <div className="document-findbar"><input ref={findRef} aria-label="查找文字" placeholder="查找" value={query} onChange={(event) => { setQuery(event.target.value); setMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findNext(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') setFindOpen(false) }} /><span>{matches.length ? `${matchIndex < 0 ? 0 : matchIndex + 1} / ${matches.length}` : '0'}</span><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext(-1)}>上一处</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext()}>下一处</button><input aria-label="替换文字" placeholder="替换为" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(false)}>替换</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(true)}>全部替换</button><button className="tool-button" type="button" aria-label="关闭查找" onClick={() => setFindOpen(false)}><Icon name="close" size={14} /></button></div>}
+    {findOpen && <div className="document-findbar"><input ref={findRef} aria-label={t('查找文字')} placeholder={t('查找')} value={query} onChange={(event) => { setQuery(event.target.value); setMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findNext(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') setFindOpen(false) }} /><span>{matches.length ? `${matchIndex < 0 ? 0 : matchIndex + 1} / ${matches.length}` : '0'}</span><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext(-1)}>{t('上一处')}</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext()}>{t('下一处')}</button><input aria-label={t('替换文字')} placeholder={t('替换为')} value={replacement} onChange={(event) => setReplacement(event.target.value)} /><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(false)}>{t('替换')}</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(true)}>{t('全部替换')}</button><button className="tool-button" type="button" aria-label={t('关闭查找')} onClick={() => setFindOpen(false)}><Icon name="close" size={14} /></button></div>}
     <div className={`document-layout${showOutline ? ' document-layout--with-outline' : ''}`}>
-      {showOutline && <aside className="document-outline" aria-label="文档目录"><div>大纲</div>{outline.map((item) => <button key={item.offset} type="button" title={item.title} aria-current={activeHeading === item.offset ? 'location' : undefined} style={{ paddingLeft: 9 + Math.min(item.depth - 1, 3) * 9 }} onClick={() => jumpTo(item.offset)}>{item.title}</button>)}{!outline.length && <p>暂无标题</p>}</aside>}
+      {showOutline && <aside className="document-outline" aria-label={t('文档目录')}><div>{t('大纲')}</div>{outline.map((item) => <button key={item.offset} type="button" title={item.title} aria-current={activeHeading === item.offset ? 'location' : undefined} style={{ paddingLeft: 9 + Math.min(item.depth - 1, 3) * 9 }} onClick={() => jumpTo(item.offset)}>{item.title}</button>)}{!outline.length && <p>{t('暂无标题')}</p>}</aside>}
       <div className={`document-panes document-panes--${view}`}>
-        {view !== 'preview' && <textarea ref={editorRef} className="document-source" aria-label="文档正文" spellCheck={false} placeholder="开始书写…" value={artifact.content} onChange={(event) => { update(event.target.value, 'typing'); setMessage('') }} onSelect={(event) => { const prefix = event.currentTarget.value.slice(0, event.currentTarget.selectionStart); setCursor({ line: prefix.split('\n').length, column: prefix.length - prefix.lastIndexOf('\n') }) }} onKeyDown={(event) => { if (event.key === 'Tab') { event.preventDefault(); wrap('  ', '', '') } }} />}
-        {view !== 'edit' && <div ref={previewRef} className="document-rendered" aria-label="文档预览"><MarkdownContent content={artifact.content} /></div>}
+        {view !== 'preview' && <textarea ref={editorRef} className="document-source" aria-label={t('文档正文')} spellCheck={false} placeholder={t('开始书写…')} value={artifact.content} onChange={(event) => { update(event.target.value, 'typing'); setMessage('') }} onSelect={(event) => { const prefix = event.currentTarget.value.slice(0, event.currentTarget.selectionStart); setCursor({ line: prefix.split('\n').length, column: prefix.length - prefix.lastIndexOf('\n') }) }} onKeyDown={(event) => { if (event.key === 'Tab') { event.preventDefault(); wrap('  ', '', '') } }} />}
+        {view !== 'edit' && <div ref={previewRef} className="document-rendered" aria-label={t('文档预览')}><MarkdownContent content={artifact.content} /></div>}
       </div>
     </div>
-    <footer className="editor-statusbar"><span role="status">{message || `${wordCount.toLocaleString()} 字 · ${outline.length} 个标题`}</span><span>行 {cursor.line}，列 {cursor.column} · Markdown</span></footer>
+    <footer className="editor-statusbar"><span role="status">{message || t('{words} 字 · {headings} 个标题', { words: wordCount.toLocaleString(locale), headings: outline.length })}</span><span>{t('行 {line}，列 {column} · Markdown', { line: cursor.line, column: cursor.column })}</span></footer>
     <input ref={importRef} type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" hidden onChange={async (event) => {
       const file = event.target.files?.[0]; event.target.value = ''; if (!file) return
-      try { const content = await readTextFile(file); if (artifact.content.trim() && !window.confirm('用导入内容替换正文？可以撤销。')) return; update(content); setMessage(`已导入 ${file.name}`) }
-      catch (error) { setMessage(error instanceof Error ? error.message : '导入失败') }
+      try { const content = await readTextFile(file); if (artifact.content.trim() && !window.confirm(t('用导入内容替换正文？可以撤销。'))) return; update(content); setMessage(t('已导入 {name}', { name: file.name })) }
+      catch (error) { setMessage(error instanceof Error ? t(error.message) : t('导入失败')) }
     }} />
   </section>
 }

@@ -7,6 +7,7 @@ import { useCanvasController, useViewportSize } from '../lib/useCanvasController
 import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, getMindMapNodeSize, parseMindMapProject } from '../lib/mindmap-export'
 import { downloadCanvasRaster } from '../lib/canvas-export'
 import { downloadText, readTextFile } from '../lib/files'
+import { useI18n } from '../lib/i18n'
 import type { MindMapArtifact, MindMapCrossLink, MindMapCrossLinkSide, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
 
 type MindMapEditorProps = {
@@ -231,6 +232,7 @@ function getDescendantCount(nodeId: string, nodes: MindMapNode[]) {
 }
 
 function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTheme }: MindMapEditorProps) {
+  const { t } = useI18n()
   const size = useViewportSize()
   const layoutBounds = useMemo(() => {
     const desktop = size.width > 680
@@ -334,7 +336,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     fitLayout(artifact.nodes, positions)
   }, [artifact.id, size.height, size.width])
 
-  if (!root) return <div className="canvas-empty">Aeback 导图没有中心节点。</div>
+  if (!root) return <div className="canvas-empty">{t('Aeback 导图没有中心节点。')}</div>
 
   const positionFor = (node: MindMapNode) => ({
     x: node.x ?? layout.get(node.id)?.x ?? size.width / 2,
@@ -388,7 +390,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     const parentColor = defaultColor(parent, root.id, artifact.nodes.indexOf(parent))
     const node: MindMapNode = {
       id: createId(),
-      text: '新节点',
+      text: t('新节点'),
       parentId,
       parentSide: side,
       x,
@@ -480,7 +482,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     const target = artifact.nodes.find((node) => node.id === toId)
     if (!source || !target) return false
     if (source.parentId === target.id || target.parentId === source.id) {
-      setConnectionNotice('这两个节点已经有分支连线')
+      setConnectionNotice(t('这两个节点已经有分支连线'))
       return false
     }
     const existing = (artifact.crossLinks ?? []).find((link) => (link.fromId === source.id && link.toId === target.id) || (link.fromId === target.id && link.toId === source.id))
@@ -488,7 +490,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       setSelectedCrossLinkId(existing.id)
       setSelectedId(source.id)
       setConnectingFromId(null)
-      setConnectionNotice('这两个节点已经连接')
+      setConnectionNotice(t('这两个节点已经连接'))
       setInspectorOpen(true)
       return true
     }
@@ -789,9 +791,9 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     closeExportMenu()
     try {
       await downloadCanvasRaster(getExportSvg(), format, artifact.title)
-      setExportNotice(`${format.toUpperCase()} 已导出`)
+      setExportNotice(t('{format} 已导出', { format: format.toUpperCase() }))
     } catch (error) {
-      setExportNotice(error instanceof Error ? error.message : '图片导出失败')
+      setExportNotice(error instanceof Error ? t(error.message) : t('图片导出失败'))
     }
     window.setTimeout(() => setExportNotice(''), 3200)
   }
@@ -811,16 +813,16 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     try {
       assertMindMapProjectFileSize(file)
       const project = parseMindMapProject(JSON.parse(await readTextFile(file)))
-      if (!window.confirm(`导入「${project.title}」并替换当前思维导图？当前版本可用撤销恢复。`)) return
+      if (!window.confirm(t('导入「{title}」并替换当前思维导图？当前版本可用撤销恢复。', { title: project.title }))) return
       commitChange({ ...project, id: artifact.id, updatedAt: new Date().toISOString() })
       setSelectedId(project.nodes.find((node) => node.parentId === null)?.id ?? '')
       setSelectedCrossLinkId(null)
       cancelConnectionMode()
       setInspectorOpen(true)
       canvas.resetCamera()
-      setExportNotice('工程已导入')
+      setExportNotice(t('工程已导入'))
     } catch (error) {
-      setExportNotice(error instanceof Error ? error.message : '工程导入失败')
+      setExportNotice(error instanceof Error ? t(error.message) : t('工程导入失败'))
     } finally {
       input.value = ''
       window.setTimeout(() => setExportNotice(''), 4000)
@@ -834,7 +836,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
         className="full-canvas"
         viewBox={`0 0 ${size.width} ${size.height}`}
         preserveAspectRatio="none"
-        aria-label={`${artifact.title} 思维导图画布`}
+        aria-label={`${artifact.title} ${t('思维导图画布')}`}
         onPointerDown={canvas.startPan}
         onPointerMove={(event) => {
           const pointer = nodeFocusPointerRef.current
@@ -863,8 +865,8 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const sourceColor = defaultColor(fromNode, root.id, artifact.nodes.indexOf(fromNode))
             const path = getConnectionPath(positionFor(fromNode), positionFor(toNode), connectionStyle, link.fromSide)
             const active = selectedCrossLinkId === link.id
-            return <g key={`cross-link-${link.id}`} className={`mindmap-cross-link mindmap-cross-link--${sourceColor}${active ? ' mindmap-cross-link--selected' : ''}`} role="button" tabIndex={0} aria-label={`跨节点连接：${fromNode.text} 与 ${toNode.text}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); selectCrossLink(link); event.currentTarget.focus() }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectCrossLink(link) } if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCrossLink(link.id) } }}>
-              <title>{`跨节点连接：${fromNode.text} — ${toNode.text}`}</title>
+            return <g key={`cross-link-${link.id}`} className={`mindmap-cross-link mindmap-cross-link--${sourceColor}${active ? ' mindmap-cross-link--selected' : ''}`} role="button" tabIndex={0} aria-label={t('跨节点连接：{from} 与 {to}', { from: fromNode.text, to: toNode.text })} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); selectCrossLink(link); event.currentTarget.focus() }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectCrossLink(link) } if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCrossLink(link.id) } }}>
+              <title>{t('跨节点连接：{from} 与 {to}', { from: fromNode.text, to: toNode.text })}</title>
               <path className="mindmap-cross-link-hit" d={path} />
               <path className="mindmap-cross-link-line" d={path} />
             </g>
@@ -886,25 +888,25 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const maxLabelChars = Math.max(3, Math.floor((nodeWidth - 24) / labelFontSize))
             const childCount = artifact.nodes.filter((child) => child.parentId === node.id).length
             const hiddenCount = node.collapsed ? getDescendantCount(node.id, artifact.nodes) : 0
-            return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${position.depth === 0 ? ' mindmap-node--root' : ''}${selectedNode ? ' canvas-node--selected' : ''}${connectionMode ? ' mindmap-node--connect-mode' : ''}${connectionMode && connectingFromId === node.id ? ' mindmap-node--connection-source' : ''}${crossLinkPreview?.targetId === node.id ? ' mindmap-node--connection-target' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={connectionMode ? `${connectingFromId ? '选择目标节点' : '选择连接起点'}：${node.text}` : `编辑节点：${node.text}`} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
+            return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${position.depth === 0 ? ' mindmap-node--root' : ''}${selectedNode ? ' canvas-node--selected' : ''}${connectionMode ? ' mindmap-node--connect-mode' : ''}${connectionMode && connectingFromId === node.id ? ' mindmap-node--connection-source' : ''}${crossLinkPreview?.targetId === node.id ? ' mindmap-node--connection-target' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={connectionMode ? `${t(connectingFromId ? '选择目标节点' : '选择连接起点')}：${node.text}` : t('编辑节点：{text}', { text: node.text })} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
               <title>{node.text}</title>
               <rect className="canvas-node-shape" width={nodeWidth} height={nodeHeight} rx={Math.min(position.depth === 0 ? 17 : 13, nodeHeight / 2)} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               {editingId === node.id ? <foreignObject className="mindmap-inline-editor" x="4" y="4" width={nodeWidth - 8} height={nodeHeight - 8}>
-                <input ref={inlineInputRef} aria-label="编辑节点文字" value={editingText} onChange={(event) => setEditingText(event.target.value)} onBlur={commitInlineEdit} onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
+                <input ref={inlineInputRef} aria-label={t('编辑节点文字')} value={editingText} onChange={(event) => setEditingText(event.target.value)} onBlur={commitInlineEdit} onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
               </foreignObject> : <text className="canvas-node-label" x={nodeWidth / 2} y={nodeHeight / 2 + labelFontSize / 3} textAnchor="middle" style={{ fontSize: labelFontSize, fontWeight: position.depth === 0 ? 650 : 570 }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>}
               {editingId !== node.id && (['up', 'right', 'down', 'left'] as MindMapSide[]).map((side) => {
                 const point = side === 'up' ? { x: nodeWidth / 2, y: 0 }
                   : side === 'right' ? { x: nodeWidth, y: nodeHeight / 2 }
                     : side === 'down' ? { x: nodeWidth / 2, y: nodeHeight }
                       : { x: 0, y: nodeHeight / 2 }
-                return <g key={side} className="mindmap-add-handle" transform={`translate(${point.x} ${point.y})`} role="button" tabIndex={selectedNode && !connectionMode ? 0 : -1} aria-label={`在节点${sideLabels[side]}添加节点或拖动创建连接`} onPointerDown={(event) => beginCrossLinkDrag(event, node, side)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (suppressAddHandleClickRef.current) { suppressAddHandleClickRef.current = false; return } addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}>
-                  <title>{`点击在${sideLabels[side]}添加节点；拖动到其他节点建立连接`}</title>
+                return <g key={side} className="mindmap-add-handle" transform={`translate(${point.x} ${point.y})`} role="button" tabIndex={selectedNode && !connectionMode ? 0 : -1} aria-label={t('在节点{side}添加节点或拖动创建连接', { side: t(sideLabels[side]) })} onPointerDown={(event) => beginCrossLinkDrag(event, node, side)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (suppressAddHandleClickRef.current) { suppressAddHandleClickRef.current = false; return } addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}>
+                  <title>{t('点击在{side}添加节点；拖动到其他节点建立连接', { side: t(sideLabels[side]) })}</title>
                   <circle className="mindmap-add-handle-bg" r="10" />
                   <path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" />
                 </g>
               })}
-              {editingId !== node.id && childCount > 0 && <g className={`mindmap-collapse-handle${node.collapsed ? ' mindmap-collapse-handle--collapsed' : ''}`} transform={`translate(${nodeWidth - 2} 2)`} role="button" tabIndex={selectedNode ? 0 : -1} aria-label={node.collapsed ? `展开分支，包含 ${hiddenCount} 个节点` : '折叠分支'} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleCollapse(node.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); toggleCollapse(node.id) } }}>
-                <title>{node.collapsed ? `展开 ${hiddenCount} 个节点` : '折叠分支'}</title>
+              {editingId !== node.id && childCount > 0 && <g className={`mindmap-collapse-handle${node.collapsed ? ' mindmap-collapse-handle--collapsed' : ''}`} transform={`translate(${nodeWidth - 2} 2)`} role="button" tabIndex={selectedNode ? 0 : -1} aria-label={node.collapsed ? t('展开分支，包含 {count} 个节点', { count: hiddenCount }) : t('折叠分支')} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleCollapse(node.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); toggleCollapse(node.id) } }}>
+                <title>{node.collapsed ? t('展开 {count} 个节点', { count: hiddenCount }) : t('折叠分支')}</title>
                 <circle r="10" /><text textAnchor="middle" y="3.2">{node.collapsed ? hiddenCount : '−'}</text>
               </g>}
             </g>
@@ -914,55 +916,55 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
 
       <CanvasHeader title={artifact.title} onTitleChange={(title) => commitChange({ ...artifact, title }, 'map-title')} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme}>
         <details className="canvas-export-menu" ref={exportMenuRef}>
-          <summary className="canvas-header-action" aria-label="导出或导入思维导图"><Icon name="download" size={15} /><span>导出</span></summary>
+          <summary className="canvas-header-action" aria-label={t('导出或导入思维导图')}><Icon name="download" size={15} /><span>{t('导出')}</span></summary>
           <div className="canvas-export-dropdown">
-            <button type="button" onClick={() => void exportRaster('png')}>导出 PNG 图片</button>
-            <button type="button" onClick={() => void exportRaster('jpg')}>导出 JPG 图片</button>
-            <button type="button" onClick={exportSvg}>导出 SVG 矢量图</button>
-            <button type="button" onClick={exportProject}>导出 Aeback 工程</button>
-            <button type="button" onClick={exportOutline}>导出 Markdown 大纲</button>
+            <button type="button" onClick={() => void exportRaster('png')}>{t('导出 PNG 图片')}</button>
+            <button type="button" onClick={() => void exportRaster('jpg')}>{t('导出 JPG 图片')}</button>
+            <button type="button" onClick={exportSvg}>{t('导出 SVG 矢量图')}</button>
+            <button type="button" onClick={exportProject}>{t('导出 Aeback 工程')}</button>
+            <button type="button" onClick={exportOutline}>{t('导出 Markdown 大纲')}</button>
             <div className="canvas-export-divider" />
-            <button type="button" onClick={() => projectFileRef.current?.click()}>导入 Aeback 工程</button>
-            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label="选择 Aeback 思维导图工程" onChange={(event) => void importProject(event)} />
+            <button type="button" onClick={() => projectFileRef.current?.click()}>{t('导入 Aeback 工程')}</button>
+            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label={t('选择 Aeback 思维导图工程')} onChange={(event) => void importProject(event)} />
           </div>
         </details>
       </CanvasHeader>
       {exportNotice && <div className="canvas-export-status" role="status">{exportNotice}</div>}
-      <div className="canvas-tool-rail" role="toolbar" aria-label="思维导图工具">
-        <button className="canvas-tool-primary" type="button" aria-label="添加节点" title="添加节点" onClick={addNode}><Icon name="plus" size={18} /></button>
-        <button className={`direction-button${connectionMode ? ' direction-button--active' : ''}`} type="button" aria-label={connectionMode ? '退出跨节点连接' : '跨节点连接'} title={connectionMode ? '退出跨节点连接 · Esc' : '依次点击两个节点建立跨节点连接'} aria-pressed={connectionMode} onClick={() => { if (connectionMode) cancelConnectionMode(); else { setConnectionMode(true); setConnectingFromId(null); setSelectedCrossLinkId(null); setConnectionNotice('') } }} onKeyDown={(event) => { if (event.key === 'Escape') cancelConnectionMode() }}><Icon name="link" size={16} /></button>
-        <div className="history-controls" role="group" aria-label="撤销与重做"><button className="direction-button" type="button" aria-label="撤销" title="撤销 Ctrl+Z" disabled={!historyStatus.canUndo} onClick={undo}><Icon name="undo" size={16} /></button><button className="direction-button" type="button" aria-label="重做" title="重做 Ctrl+Shift+Z" disabled={!historyStatus.canRedo} onClick={redo}><Icon name="redo" size={16} /></button></div>
+      <div className="canvas-tool-rail" role="toolbar" aria-label={t('思维导图工具')}>
+        <button className="canvas-tool-primary" type="button" aria-label={t('添加节点')} title={t('添加节点')} onClick={addNode}><Icon name="plus" size={18} /></button>
+        <button className={`direction-button${connectionMode ? ' direction-button--active' : ''}`} type="button" aria-label={t(connectionMode ? '退出跨节点连接' : '跨节点连接')} title={t(connectionMode ? '退出跨节点连接 · Esc' : '依次点击两个节点建立跨节点连接')} aria-pressed={connectionMode} onClick={() => { if (connectionMode) cancelConnectionMode(); else { setConnectionMode(true); setConnectingFromId(null); setSelectedCrossLinkId(null); setConnectionNotice('') } }} onKeyDown={(event) => { if (event.key === 'Escape') cancelConnectionMode() }}><Icon name="link" size={16} /></button>
+        <div className="history-controls" role="group" aria-label={t('撤销与重做')}><button className="direction-button" type="button" aria-label={t('撤销')} title={`${t('撤销')} Ctrl+Z`} disabled={!historyStatus.canUndo} onClick={undo}><Icon name="undo" size={16} /></button><button className="direction-button" type="button" aria-label={t('重做')} title={`${t('重做')} Ctrl+Shift+Z`} disabled={!historyStatus.canRedo} onClick={redo}><Icon name="redo" size={16} /></button></div>
         <div className="canvas-tool-separator" />
-        <div className="direction-controls" role="group" aria-label="布局方向">
-          {directions.map(({ value, label, icon }) => <button className={`direction-button${direction === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={label} title={label} aria-pressed={direction === value} onClick={() => setDirection(value)}><Icon name={icon} size={16} /></button>)}
+        <div className="direction-controls" role="group" aria-label={t('布局方向')}>
+          {directions.map(({ value, label, icon }) => <button className={`direction-button${direction === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={t(label)} title={t(label)} aria-pressed={direction === value} onClick={() => setDirection(value)}><Icon name={icon} size={16} /></button>)}
         </div>
         <div className="canvas-tool-separator" />
-        <div className="line-style-controls" role="group" aria-label="连线样式">
-          {lineStyles.map(({ value, label, icon }) => <button className={`direction-button${connectionStyle === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={label} title={label} aria-pressed={connectionStyle === value} onClick={() => setConnectionStyle(value)}><Icon name={icon} size={16} /></button>)}
+        <div className="line-style-controls" role="group" aria-label={t('连线样式')}>
+          {lineStyles.map(({ value, label, icon }) => <button className={`direction-button${connectionStyle === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={t(label)} title={t(label)} aria-pressed={connectionStyle === value} onClick={() => setConnectionStyle(value)}><Icon name={icon} size={16} /></button>)}
         </div>
         <div className="canvas-tool-separator" />
-        <button className="direction-button" type="button" aria-label="自动整理布局" title="自动整理布局" onClick={arrangeNodes}><Icon name="arrange" size={16} /></button>
+        <button className="direction-button" type="button" aria-label={t('自动整理布局')} title={t('自动整理布局')} onClick={arrangeNodes}><Icon name="arrange" size={16} /></button>
         <div className="canvas-tool-separator" />
-        <button className={`canvas-tool-toggle${inspectorOpen ? ' canvas-tool-toggle--active' : ''}`} type="button" aria-label={inspectorOpen ? '隐藏节点属性' : '显示节点属性'} aria-pressed={inspectorOpen} title={inspectorOpen ? '隐藏节点属性' : '显示节点属性'} onClick={() => setInspectorOpen((open) => !open)}><Icon name="list" size={16} /></button>
+        <button className={`canvas-tool-toggle${inspectorOpen ? ' canvas-tool-toggle--active' : ''}`} type="button" aria-label={t(inspectorOpen ? '隐藏节点属性' : '显示节点属性')} aria-pressed={inspectorOpen} title={t(inspectorOpen ? '隐藏节点属性' : '显示节点属性')} onClick={() => setInspectorOpen((open) => !open)}><Icon name="list" size={16} /></button>
       </div>
-      <div className="canvas-zoom" role="toolbar" aria-label="画布缩放">
-        <button type="button" aria-label="放大" onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label="缩小" onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label="重置画布" title="重置画布" onClick={canvas.resetCamera}><Icon name="grid" size={15} /></button>
+      <div className="canvas-zoom" role="toolbar" aria-label={t('画布缩放')}>
+        <button type="button" aria-label={t('放大')} onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label={t('缩小')} onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label={t('重置画布')} title={t('重置画布')} onClick={canvas.resetCamera}><Icon name="grid" size={15} /></button>
       </div>
-      {selected && inspectorOpen && <aside className="canvas-inspector" aria-label="节点属性">
-        <div className="canvas-inspector-heading"><span>节点</span>{selected.id !== root.id && <div className="canvas-inspector-actions"><button type="button" aria-label="复制节点分支" title="复制节点分支" onClick={duplicateSelected}><Icon name="duplicate" size={15} /></button><button type="button" aria-label="删除节点" title="删除节点" onClick={deleteNode}><Icon name="trash" size={15} /></button></div>}</div>
-        {selectedCrossLink && <div className="mindmap-cross-link-inspector"><span className="canvas-label">选中的跨节点连线</span><p>{artifact.nodes.find((node) => node.id === selectedCrossLink.fromId)?.text} — {artifact.nodes.find((node) => node.id === selectedCrossLink.toId)?.text}</p><button type="button" onClick={() => removeCrossLink(selectedCrossLink.id)}><Icon name="trash" size={13} />删除连线</button></div>}
-        <label className="canvas-label" htmlFor="mindmap-node-name">内容</label>
+      {selected && inspectorOpen && <aside className="canvas-inspector" aria-label={t('节点属性')}>
+        <div className="canvas-inspector-heading"><span>{t('节点')}</span>{selected.id !== root.id && <div className="canvas-inspector-actions"><button type="button" aria-label={t('复制节点分支')} title={t('复制节点分支')} onClick={duplicateSelected}><Icon name="duplicate" size={15} /></button><button type="button" aria-label={t('删除节点')} title={t('删除节点')} onClick={deleteNode}><Icon name="trash" size={15} /></button></div>}</div>
+        {selectedCrossLink && <div className="mindmap-cross-link-inspector"><span className="canvas-label">{t('选中的跨节点连线')}</span><p>{artifact.nodes.find((node) => node.id === selectedCrossLink.fromId)?.text} — {artifact.nodes.find((node) => node.id === selectedCrossLink.toId)?.text}</p><button type="button" onClick={() => removeCrossLink(selectedCrossLink.id)}><Icon name="trash" size={13} />{t('删除连线')}</button></div>}
+        <label className="canvas-label" htmlFor="mindmap-node-name">{t('内容')}</label>
         <input id="mindmap-node-name" value={selected.text} onChange={(event) => commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, text: event.target.value } : node) }, 'node-text')} />
         {selected.id !== root.id && <>
-          <label className="canvas-label" htmlFor="mindmap-node-parent">父节点</label>
+          <label className="canvas-label" htmlFor="mindmap-node-parent">{t('父节点')}</label>
           <select id="mindmap-node-parent" value={selected.parentId ?? root.id} onChange={(event) => setParent(event.target.value)}>{visibleParents.map((node) => <option key={node.id} value={node.id}>{node.text}</option>)}</select>
         </>}
-        <span className="canvas-label">节点颜色</span>
-        <div className="color-palette" role="group" aria-label="节点颜色">{palette.map((color) => <button className={`color-swatch color-swatch--${color.value}${defaultColor(selected, root.id, artifact.nodes.indexOf(selected)) === color.value ? ' color-swatch--selected' : ''}`} type="button" key={color.value} aria-label={color.label} aria-pressed={defaultColor(selected, root.id, artifact.nodes.indexOf(selected)) === color.value} title={color.label} onClick={() => commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, color: color.value } : node) })} />)}</div>
-        <label className="canvas-label canvas-opacity-label" htmlFor="mindmap-node-opacity"><span>填充透明度</span><output htmlFor="mindmap-node-opacity">{selected.opacity ?? 100}%</output></label>
-        <input className="canvas-opacity-slider" id="mindmap-node-opacity" type="range" min="0" max="100" step="5" value={selected.opacity ?? 100} aria-label="节点填充透明度" onChange={(event) => { const opacity = Number(event.target.value); commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, opacity } : node) }, 'opacity') }} onPointerUp={finishHistoryGroup} onKeyUp={finishHistoryGroup} />
+        <span className="canvas-label">{t('节点颜色')}</span>
+        <div className="color-palette" role="group" aria-label={t('节点颜色')}>{palette.map((color) => <button className={`color-swatch color-swatch--${color.value}${defaultColor(selected, root.id, artifact.nodes.indexOf(selected)) === color.value ? ' color-swatch--selected' : ''}`} type="button" key={color.value} aria-label={t(color.label)} aria-pressed={defaultColor(selected, root.id, artifact.nodes.indexOf(selected)) === color.value} title={t(color.label)} onClick={() => commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, color: color.value } : node) })} />)}</div>
+        <label className="canvas-label canvas-opacity-label" htmlFor="mindmap-node-opacity"><span>{t('填充透明度')}</span><output htmlFor="mindmap-node-opacity">{selected.opacity ?? 100}%</output></label>
+        <input className="canvas-opacity-slider" id="mindmap-node-opacity" type="range" min="0" max="100" step="5" value={selected.opacity ?? 100} aria-label={t('节点填充透明度')} onChange={(event) => { const opacity = Number(event.target.value); commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, opacity } : node) }, 'opacity') }} onPointerUp={finishHistoryGroup} onKeyUp={finishHistoryGroup} />
       </aside>}
-      <div className={`canvas-help${connectionMode ? ' canvas-help--connection' : ''}`} role={connectionMode ? 'status' : undefined}>{connectionMode ? connectionNotice || (connectingFromId ? '点击终点 · Esc 取消' : '点击起点 · Esc 取消') : '拖动加号连接节点 · 拖动节点移动 · 空白处平移 · 滚轮缩放'}</div>
+      <div className={`canvas-help${connectionMode ? ' canvas-help--connection' : ''}`} role={connectionMode ? 'status' : undefined}>{connectionMode ? connectionNotice || t(connectingFromId ? '点击终点 · Esc 取消' : '点击起点 · Esc 取消') : t('拖动加号连接节点 · 拖动节点移动 · 空白处平移 · 滚轮缩放')}</div>
     </div>
   )
 }
