@@ -76,12 +76,20 @@ export type TableArtifact = ArtifactBase & {
   groupBy?: number
   rowHeight?: TableRowHeight
   cellColors?: Record<string, TableCellColor>
+  cellFormatting?: Record<string, TableCellFormatting>
 }
 
 export type TableColumnType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'image'
 export type TableSummaryType = 'none' | 'count' | 'nonEmptyCount' | 'sum' | 'average' | 'min' | 'max'
 export type TableRowHeight = 'compact' | 'normal' | 'comfortable'
 export type TableCellColor = 'purple' | 'blue' | 'green' | 'yellow' | 'orange' | 'red'
+export type TableCellAlignment = 'left' | 'center' | 'right'
+export type TableCellFormatting = {
+  alignment?: TableCellAlignment
+  wrap?: boolean
+  fontSize?: number
+  textColor?: string
+}
 
 export type WorkspaceArtifact = MindMapArtifact | GraphArtifact | DocumentArtifact | TableArtifact
 

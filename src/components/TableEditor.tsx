@@ -1,16 +1,22 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { toBlob } from 'html-to-image'
-import type { TableArtifact, TableCellColor, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
+import type { TableArtifact, TableCellAlignment, TableCellColor, TableCellFormatting, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
 import { downloadBlob, downloadText, readTextFile } from '../lib/files'
-import { adjustCellColors, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
-import Icon from './Icon'
+import { adjustCellColors, adjustCellMap, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
+import Icon, { type IconName } from './Icon'
 import TableImportDialog from './TableImportDialog'
 
 type TableEditorProps = { artifact: TableArtifact; onChange: (artifact: TableArtifact) => void }
 type Address = { row: number; column: number }
 type EditingCell = Address & { draft: string; source?: 'bar' }
+type TableClipboardRange = {
+  sourceRows: number[]
+  sourceColumn: number
+  cellFormatting?: Array<Array<TableCellFormatting | null>>
+  cellColors?: Array<Array<TableCellColor | null>>
+}
 const PAGE_SIZE = 100
 const DEFAULT_COLUMN_WIDTH = 180
 const MIN_COLUMN_WIDTH = 120
@@ -18,6 +24,16 @@ const MAX_COLUMN_WIDTH = 720
 const cellColors: Array<{ value: TableCellColor; label: string }> = [
   { value: 'purple', label: '紫色' }, { value: 'blue', label: '蓝色' }, { value: 'green', label: '绿色' },
   { value: 'yellow', label: '黄色' }, { value: 'orange', label: '橙色' }, { value: 'red', label: '红色' },
+]
+const textColors = [
+  { value: '#ff6b61', label: '红色' }, { value: '#ff9c4a', label: '橙色' }, { value: '#d9b84c', label: '黄色' },
+  { value: '#44bd95', label: '绿色' }, { value: '#5798f5', label: '蓝色' }, { value: '#a375ef', label: '紫色' },
+]
+const fontSizes = [10, 11, 12, 13, 14, 16, 18, 20, 24]
+const alignments: Array<{ value: TableCellAlignment; label: string; icon: IconName }> = [
+  { value: 'left', label: '左对齐', icon: 'alignLeft' },
+  { value: 'center', label: '居中', icon: 'alignCenter' },
+  { value: 'right', label: '右对齐', icon: 'alignRight' },
 ]
 const rowHeights: Array<{ value: TableRowHeight; label: string }> = [
   { value: 'compact', label: '紧凑' }, { value: 'normal', label: '标准' }, { value: 'comfortable', label: '舒适' },
@@ -96,6 +112,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const selectOptionsByColumn = useMemo(() => artifact.columns.map((_, index) => columnType(index) === 'select' ? Array.from(new Set(artifact.rows.map((row) => row[index] ?? '').filter((value) => value && !value.startsWith('=')))) : []), [artifact.columns, artifact.columnTypes, artifact.rows])
   const selectOptions = (index: number) => selectOptionsByColumn[index] ?? []
   const summaryType = (column: number): TableSummaryType => artifact.columnSummaries?.[column] ?? (viewRows.some((row) => !results[row][column].error && typeof results[row][column].value === 'number') ? 'sum' : 'none')
+  const cellFormatting = (address: Address): TableCellFormatting => artifact.cellFormatting?.[`${address.row}:${address.column}`] ?? {}
   const summaryValue = (column: number, type: TableSummaryType) => {
     const cells = viewRows.map((row) => results[row][column])
     if (type === 'none') return ''
@@ -123,7 +140,36 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const endColumn = Math.max(active.column, anchor?.column ?? active.column)
   const selectedRows = selectedViewIndex < 0 ? [] : viewRows.slice(startIndex, endIndex + 1)
   const selectedNumbers = selectedRows.flatMap((row) => results[row].slice(startColumn, endColumn + 1)).filter((cell) => !cell.error && typeof cell.value === 'number').map((cell) => Number(cell.value))
+  const activeFormatting = cellFormatting(active)
+  const activeResult = results[active.row]?.[active.column]
+  const activeAlignment = activeFormatting.alignment ?? (typeof activeResult?.value === 'number' ? 'right' : 'left')
+  const formattingDisabled = !selectedRows.length || editing !== null
   const commit = (next: TableArtifact, group = '') => { history.commit(next, group); setMessage('') }
+  const applyCellFormatting = (patch: Partial<TableCellFormatting>) => {
+    const formatting = { ...artifact.cellFormatting }
+    for (const row of selectedRows) for (let column = startColumn; column <= endColumn; column += 1) {
+      const key = `${row}:${column}`
+      const next = { ...(formatting[key] ?? {}) }
+      for (const property of Object.keys(patch) as Array<keyof TableCellFormatting>) {
+        const value = patch[property]
+        if (value === undefined) delete next[property]
+        else Object.assign(next, { [property]: value })
+      }
+      if (Object.keys(next).length) formatting[key] = next
+      else delete formatting[key]
+    }
+    commit({ ...artifact, cellFormatting: Object.keys(formatting).length ? formatting : undefined })
+  }
+  const clearSelectedCellFormatting = () => {
+    const formatting = { ...artifact.cellFormatting }
+    const colors = { ...artifact.cellColors }
+    for (const row of selectedRows) for (let column = startColumn; column <= endColumn; column += 1) {
+      const key = `${row}:${column}`
+      delete formatting[key]
+      delete colors[key]
+    }
+    commit({ ...artifact, cellFormatting: Object.keys(formatting).length ? formatting : undefined, cellColors: Object.keys(colors).length ? colors : undefined })
+  }
   const focus = (address: Address, extend = false, immediate = false) => {
     editingRef.current = null
     setEditing(null)
@@ -220,7 +266,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     }
     rows = rows.map((row) => row.map((value) => adjustFormulaReferences(value, axis, index, action)))
     const groupBy = axis !== 'column' || artifact.groupBy === undefined ? artifact.groupBy : action === 'delete' ? artifact.groupBy === index ? undefined : artifact.groupBy > index ? artifact.groupBy - 1 : artifact.groupBy : artifact.groupBy >= index ? artifact.groupBy + 1 : artifact.groupBy
-    commit({ ...artifact, columns, columnTypes: types, columnWidths: widths, columnSummaries: summaries, rows, groupBy, cellColors: adjustCellColors(artifact.cellColors, axis, index, action) })
+    commit({ ...artifact, columns, columnTypes: types, columnWidths: widths, columnSummaries: summaries, rows, groupBy, cellColors: adjustCellColors(artifact.cellColors, axis, index, action), cellFormatting: adjustCellMap(artifact.cellFormatting, axis, index, action) })
     setEditing(null); setAnchor(null)
     setSelected({ row: Math.min(active.row, Math.max(0, rows.length - 1)), column: Math.min(active.column, columns.length - 1) })
     if (axis === 'column') { setSort(null); setFilterColumn(-1); setFilterValue('') }
@@ -229,7 +275,12 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     if (event.target instanceof HTMLInputElement || !selectedRows.length) return
     event.preventDefault()
     const matrix = selectedRows.map((row) => artifact.columns.slice(startColumn, endColumn + 1).map((_, offset) => artifact.rows[row][startColumn + offset] ?? ''))
-    const copiedRange = { sourceRows: selectedRows, sourceColumn: startColumn }
+    const copiedRange: TableClipboardRange = {
+      sourceRows: selectedRows,
+      sourceColumn: startColumn,
+      cellFormatting: selectedRows.map((row) => Array.from({ length: endColumn - startColumn + 1 }, (_, offset) => artifact.cellFormatting?.[`${row}:${startColumn + offset}`] ?? null)),
+      cellColors: selectedRows.map((row) => Array.from({ length: endColumn - startColumn + 1 }, (_, offset) => artifact.cellColors?.[`${row}:${startColumn + offset}`] ?? null)),
+    }
     event.clipboardData.setData('text/plain', serializeDelimited(matrix, '\t'))
     event.clipboardData.setData('application/x-aeback-table', JSON.stringify(copiedRange))
   }
@@ -238,7 +289,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     event.preventDefault()
     try {
       const metadata = event.clipboardData.getData('application/x-aeback-table')
-      const source = metadata ? JSON.parse(metadata) as { sourceRows: number[]; sourceColumn: number } : null
+      const source = metadata ? JSON.parse(metadata) as TableClipboardRange : null
       const matrix = parseDelimited(event.clipboardData.getData('text/plain'), '\t')
       if (!matrix.length) return
       const start = Math.max(0, selectedViewIndex)
@@ -247,17 +298,32 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
       const width = Math.max(artifact.columns.length, active.column + Math.max(...matrix.map((row) => row.length)))
       const columns = Array.from({ length: width }, (_, index) => artifact.columns[index] ?? `列 ${index + 1}`)
       const rows = Array.from({ length: artifact.rows.length + extraRows }, (_, row) => columns.map((_, column) => artifact.rows[row]?.[column] ?? ''))
+      const cellFormatting = { ...artifact.cellFormatting }
+      const cellColors = { ...artifact.cellColors }
       matrix.forEach((values, offset) => {
         const target = viewRows[start + offset] ?? artifact.rows.length + offset - (viewRows.length - start)
         values.forEach((value, column) => {
+          const targetColumn = active.column + column
           const sourceRow = source?.sourceRows[offset]
           const sourceColumn = source?.sourceColumn
-          rows[target][active.column + column] = sourceRow === undefined || sourceColumn === undefined
+          rows[target][targetColumn] = sourceRow === undefined || sourceColumn === undefined
             ? value
-            : translateFormulaReferences(value, target - sourceRow, active.column + column - sourceColumn)
+            : translateFormulaReferences(value, target - sourceRow, targetColumn - sourceColumn)
+          if (source?.cellFormatting) {
+            const format = source.cellFormatting[offset]?.[column]
+            const key = `${target}:${targetColumn}`
+            if (format) cellFormatting[key] = format
+            else delete cellFormatting[key]
+          }
+          if (source?.cellColors) {
+            const color = source.cellColors[offset]?.[column]
+            const key = `${target}:${targetColumn}`
+            if (color) cellColors[key] = color
+            else delete cellColors[key]
+          }
         })
       })
-      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)), columnWidths: columns.map((_, index) => columnWidth(index)), columnSummaries: artifact.columnSummaries ? columns.map((_, index) => artifact.columnSummaries?.[index] ?? 'none') : undefined })
+      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)), columnWidths: columns.map((_, index) => columnWidth(index)), columnSummaries: artifact.columnSummaries ? columns.map((_, index) => artifact.columnSummaries?.[index] ?? 'none') : undefined, cellFormatting: Object.keys(cellFormatting).length ? cellFormatting : undefined, cellColors: Object.keys(cellColors).length ? cellColors : undefined })
       setMessage(`已粘贴 ${matrix.length} 行`)
     } catch (error) { setMessage(error instanceof Error ? error.message : '粘贴失败') }
   }
@@ -297,7 +363,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const columns = importMode === 'append' ? artifact.columns : Array.from({ length: width }, (_, column) => firstHeader ? importData[0][column]?.trim() || `列 ${column + 1}` : `列 ${column + 1}`)
     const appendedRows = importMode === 'append' ? artifact.rows.length : 0
     const rows = values.map((row) => columns.map((_, column) => translateFormulaReferences(row[column] ?? '', appendedRows, 0)))
-    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))), columnWidths: importMode === 'append' ? artifact.columnWidths : undefined, columnSummaries: importMode === 'append' ? artifact.columnSummaries : undefined, cellColors: importMode === 'append' ? artifact.cellColors : undefined, groupBy: importMode === 'append' ? artifact.groupBy : undefined })
+    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))), columnWidths: importMode === 'append' ? artifact.columnWidths : undefined, columnSummaries: importMode === 'append' ? artifact.columnSummaries : undefined, cellColors: importMode === 'append' ? artifact.cellColors : undefined, cellFormatting: importMode === 'append' ? artifact.cellFormatting : undefined, groupBy: importMode === 'append' ? artifact.groupBy : undefined })
     setSort(null); setQuery(''); setFilterColumn(-1); setFilterValue(''); setPage(0); setAnchor(null); setSelected({ row: 0, column: 0 }); setImportData(null)
     setMessage(`已导入 ${values.length} 行`)
   }
@@ -356,6 +422,15 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     </div>
     <div className="table-viewbar"><select aria-label="筛选列" value={filterColumn} onChange={(event) => { setFilterColumn(Number(event.target.value)); setPage(0); setAnchor(null) }}><option value={-1}>筛选列</option>{artifact.columns.map((column, index) => <option value={index} key={index}>{columnName(index)} · {column}</option>)}</select>{filterColumn >= 0 && <input aria-label="筛选内容" placeholder="包含内容" value={filterValue} onChange={(event) => { setFilterValue(event.target.value); setPage(0); setAnchor(null) }} />}{(query || filterColumn >= 0 || sort) && <button className="tool-button" type="button" onClick={() => { setQuery(''); setFilterColumn(-1); setFilterValue(''); setSort(null); setAnchor(null) }}>重置视图</button>}<span>{viewRows.length} / {artifact.rows.length} 行 · {artifact.columns.length} 列</span></div>
     <div className="table-formulabar"><span>{columnName(active.column)}{active.row + 1}</span><span>ƒx</span><input aria-label="单元格值或公式" placeholder="输入值或 =SUM(B1:B3)" value={editing?.draft ?? artifact.rows[active.row]?.[active.column] ?? ''} disabled={!artifact.rows.length} onChange={(event) => setEditing({ ...active, draft: event.target.value, source: 'bar' })} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finishEdit(); focus(active) } if (event.key === 'Escape') { setEditing(null); focus(active) } }} /><details className="editor-menu formula-help"><summary aria-label="公式帮助">?</summary><div><p>支持 A1、$A$1 和 A1:B5 引用</p><p>+ − * / ^ 与括号</p><p>SUM · AVERAGE · MIN · MAX · COUNT · ROUND · ABS</p><p>排序仅改变视图；公式坐标使用左侧原始行号。</p><p>Shift + 方向键选区；复制 / 粘贴可与 Excel 互通。</p></div></details></div>
+    <div className="table-formatbar" role="toolbar" aria-label="单元格格式">
+      <div className="table-format-group" role="group" aria-label="文本对齐">
+        {alignments.map((alignment) => <button className="tool-button" key={alignment.value} type="button" aria-label={alignment.label} title={alignment.label} aria-pressed={activeAlignment === alignment.value} disabled={formattingDisabled} onClick={() => applyCellFormatting({ alignment: alignment.value })}><Icon name={alignment.icon} size={16} /></button>)}
+      </div>
+      <span className="table-format-divider" />
+      <button className={`tool-button table-wrap-button${activeFormatting.wrap ? ' tool-button--active' : ''}`} type="button" aria-label="自动换行" title="自动换行" aria-pressed={Boolean(activeFormatting.wrap)} disabled={formattingDisabled} onClick={() => applyCellFormatting({ wrap: activeFormatting.wrap ? undefined : true })}><Icon name="wrap" size={16} /><span>换行</span></button>
+      <label className="table-format-size"><span>字号</span><select aria-label="字号" title="设置所选单元格字号" value={activeFormatting.fontSize ?? 0} disabled={formattingDisabled} onChange={(event) => applyCellFormatting({ fontSize: Number(event.target.value) || undefined })}><option value={0}>默认</option>{fontSizes.map((size) => <option key={size} value={size}>{size}px</option>)}</select></label>
+      <details className="editor-menu table-text-color-menu"><summary aria-label="文字颜色" title="文字颜色"><span className="table-font-color-preview" style={{ color: activeFormatting.textColor ?? 'currentColor', borderColor: activeFormatting.textColor ?? 'currentColor' }}>A</span><span>颜色</span></summary><div><span className="table-menu-label">文字颜色</span><div className="table-text-color-options">{textColors.map((color) => <button key={color.value} type="button" className="table-text-color-swatch" style={{ backgroundColor: color.value }} aria-label={`${color.label}文字`} aria-pressed={activeFormatting.textColor === color.value} title={color.label} disabled={formattingDisabled} onClick={(event) => { applyCellFormatting({ textColor: color.value }); event.currentTarget.closest('details')?.removeAttribute('open') }} />)}</div><label className="table-custom-color"><span>自定义</span><input type="color" aria-label="自定义文字颜色" value={activeFormatting.textColor ?? '#ff9c4a'} disabled={formattingDisabled} onChange={(event) => applyCellFormatting({ textColor: event.target.value })} /></label><button type="button" disabled={formattingDisabled} onClick={(event) => { applyCellFormatting({ textColor: undefined }); event.currentTarget.closest('details')?.removeAttribute('open') }}>恢复默认颜色</button><button type="button" disabled={formattingDisabled} onClick={(event) => { clearSelectedCellFormatting(); event.currentTarget.closest('details')?.removeAttribute('open') }}>清除单元格格式</button></div></details>
+    </div>
     <div ref={gridRef} className="table-scroll" onKeyDown={onGridKey} onCopy={onCopy} onPaste={onPaste}>
       <table className={`smart-table table-density--${artifact.rowHeight ?? 'normal'}${resizingColumnWidths ? ' table-column-resizing' : ''}`} role="grid" aria-label="Aeback 智能表格" aria-rowcount={viewRows.length + 1} aria-colcount={artifact.columns.length + 1} style={{ minWidth: 79 + artifact.columns.reduce((total, _, index) => total + columnWidth(index), 0) }}>
         <thead><tr><th className="table-row-number" aria-label="原始行号">#</th>{artifact.columns.map((column, columnIndex) => <th key={columnIndex} style={{ width: columnWidth(columnIndex) }} aria-sort={sort?.column === columnIndex ? sort.direction === 1 ? 'ascending' : 'descending' : 'none'}><div className="table-column-heading"><span>{columnName(columnIndex)}</span><input aria-label={`第 ${columnIndex + 1} 列标题`} value={column} onChange={(event) => commit({ ...artifact, columns: artifact.columns.map((item, index) => index === columnIndex ? event.target.value : item) }, `heading-${columnIndex}`)} /><button type="button" aria-label={`排序第 ${columnIndex + 1} 列`} title="升序 / 降序 / 原始顺序" onClick={() => { setSort(sort?.column === columnIndex ? sort.direction === 1 ? { column: columnIndex, direction: -1 } : null : { column: columnIndex, direction: 1 }); setAnchor(null); setPage(0) }}>{sort?.column === columnIndex ? sort.direction === 1 ? '↑' : '↓' : '↕'}</button></div><div className="table-column-settings"><select aria-label={`第 ${columnIndex + 1} 列类型`} value={columnType(columnIndex)} onChange={(event) => commit({ ...artifact, columnTypes: artifact.columns.map((_, index) => index === columnIndex ? event.target.value as TableColumnType : columnType(index)) })}>{columnTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><details className="editor-menu"><summary aria-label={`第 ${columnIndex + 1} 列操作`}>···</summary><div><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex)}>左侧插入列</button><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex + 1)}>右侧插入列</button><button type="button" disabled={artifact.columns.length <= 1} onClick={() => changeStructure('column', 'delete', columnIndex)}>删除列</button></div></details></div><button className="table-resize-handle" type="button" aria-label={`调整第 ${columnIndex + 1} 列宽度`} title="拖动调整列宽" onPointerDown={(event) => beginColumnResize(event, columnIndex)} onPointerMove={updateColumnResize} onPointerUp={finishColumnResize} onPointerCancel={finishColumnResize} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); const widths = Array.from({ length: artifact.columns.length }, (_, index) => columnWidth(index)); widths[columnIndex] = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, widths[columnIndex] + (event.key === 'ArrowRight' ? 16 : -16))); commit({ ...artifact, columnWidths: widths }) } }} /></th>)}<th className="table-actions-head"><button type="button" aria-label="添加列" title="添加属性列" disabled={artifact.columns.length >= MAX_COLUMNS} onClick={() => changeStructure('column', 'insert', artifact.columns.length)}><Icon name="plus" size={14} /></button></th></tr></thead>
@@ -373,8 +448,11 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
           const raw = artifact.rows[rowIndex][columnIndex] ?? ''
           const result = results[rowIndex][columnIndex]
           const error = result.error ?? validateCell(raw, columnType(columnIndex))
-          return <td key={columnIndex} style={{ width: columnWidth(columnIndex) }} role="gridcell" data-cell={`${rowIndex}:${columnIndex}`} data-fill={artifact.cellColors?.[`${rowIndex}:${columnIndex}`]} aria-selected={inRange} aria-invalid={Boolean(error)} tabIndex={isActive ? 0 : -1} className={`${inRange ? 'table-cell--selected ' : ''}${isActive ? 'table-cell--active ' : ''}${error ? 'table-cell--error ' : ''}${typeof result.value === 'number' ? 'table-cell--numeric' : ''}`} title={error || (raw.startsWith('=') ? raw : undefined)} onClick={(event) => { if (!isEditing) focus(address, event.shiftKey, true) }} onDoubleClick={() => edit(address)}>
-            {isEditing ? <input className="table-cell-editor" list={columnType(columnIndex) === 'select' ? `aeback-${artifact.id}-select-${columnIndex}` : undefined} type={columnType(columnIndex) === 'date' && !raw.startsWith('=') ? 'date' : columnType(columnIndex) === 'image' ? 'url' : 'text'} aria-label={`编辑 ${columnName(columnIndex)}${rowIndex + 1}`} value={editing.draft} autoFocus onChange={(event) => setEditing({ ...editing, draft: event.target.value })} onClick={(event) => event.stopPropagation()} onBlur={finishEdit} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); finishEdit(); if (event.key === 'Enter') move(event.shiftKey ? -1 : 1, 0); else move(0, event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.preventDefault(); editingRef.current = null; setEditing(null); focus(address) } }} /> : columnType(columnIndex) === 'checkbox' && !raw.startsWith('=') && !error ? <input type="checkbox" aria-label={`切换 ${columnName(columnIndex)}${rowIndex + 1}`} checked={raw.toUpperCase() === 'TRUE'} onClick={(event) => event.stopPropagation()} onChange={(event) => { setSelected(address); setCell(address, event.target.checked ? 'TRUE' : 'FALSE') }} /> : columnType(columnIndex) === 'select' && !raw.startsWith('=') ? <span className="table-select-value" data-tone={Math.max(0, selectOptions(columnIndex).indexOf(raw)) % 6}>{displayCell(result)}</span> : columnType(columnIndex) === 'image' && !raw.startsWith('=') && !error ? <TableImageCell source={raw} /> : <span>{displayCell(result)}</span>}
+          const formatting = cellFormatting(address)
+          const isNumeric = typeof result.value === 'number'
+          const cellStyle = { width: columnWidth(columnIndex), textAlign: formatting.alignment ?? (isNumeric ? 'right' : 'left'), color: formatting.textColor, fontSize: formatting.fontSize ? `${formatting.fontSize}px` : undefined, height: formatting.wrap ? 'auto' : undefined }
+          return <td key={columnIndex} style={cellStyle} role="gridcell" data-cell={`${rowIndex}:${columnIndex}`} data-fill={artifact.cellColors?.[`${rowIndex}:${columnIndex}`]} data-wrap={formatting.wrap ? 'true' : undefined} aria-selected={inRange} aria-invalid={Boolean(error)} tabIndex={isActive ? 0 : -1} className={`${inRange ? 'table-cell--selected ' : ''}${isActive ? 'table-cell--active ' : ''}${error ? 'table-cell--error ' : ''}${isNumeric ? 'table-cell--numeric' : ''}`} title={error || (raw.startsWith('=') ? raw : undefined)} onClick={(event) => { if (!isEditing) focus(address, event.shiftKey, true) }} onDoubleClick={() => edit(address)}>
+            {isEditing ? <input className="table-cell-editor" style={{ fontSize: cellStyle.fontSize, color: cellStyle.color, textAlign: cellStyle.textAlign }} list={columnType(columnIndex) === 'select' ? `aeback-${artifact.id}-select-${columnIndex}` : undefined} type={columnType(columnIndex) === 'date' && !raw.startsWith('=') ? 'date' : columnType(columnIndex) === 'image' ? 'url' : 'text'} aria-label={`编辑 ${columnName(columnIndex)}${rowIndex + 1}`} value={editing.draft} autoFocus onChange={(event) => setEditing({ ...editing, draft: event.target.value })} onClick={(event) => event.stopPropagation()} onBlur={finishEdit} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); finishEdit(); if (event.key === 'Enter') move(event.shiftKey ? -1 : 1, 0); else move(0, event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.preventDefault(); editingRef.current = null; setEditing(null); focus(address) } }} /> : columnType(columnIndex) === 'checkbox' && !raw.startsWith('=') && !error ? <input type="checkbox" aria-label={`切换 ${columnName(columnIndex)}${rowIndex + 1}`} checked={raw.toUpperCase() === 'TRUE'} onClick={(event) => event.stopPropagation()} onChange={(event) => { setSelected(address); setCell(address, event.target.checked ? 'TRUE' : 'FALSE') }} /> : columnType(columnIndex) === 'select' && !raw.startsWith('=') ? <span className="table-select-value" style={{ fontSize: cellStyle.fontSize, color: cellStyle.color }} data-tone={Math.max(0, selectOptions(columnIndex).indexOf(raw)) % 6}>{displayCell(result)}</span> : columnType(columnIndex) === 'image' && !raw.startsWith('=') && !error ? <TableImageCell source={raw} /> : <span>{displayCell(result)}</span>}
           </td>
         })}<td className="table-row-action"><details className="editor-menu"><summary aria-label={`第 ${rowIndex + 1} 行操作`}>···</summary><div><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex)}>上方插入行</button><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex + 1)}>下方插入行</button><button type="button" onClick={() => changeStructure('row', 'delete', rowIndex)}>删除行</button></div></details></td></tr>
         })}</tbody>

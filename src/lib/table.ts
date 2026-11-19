@@ -80,10 +80,10 @@ export function validateCell(value: string, type: TableColumnType) {
   return ''
 }
 
-export function adjustCellColors(colors: Record<string, TableCellColor> | undefined, axis: 'row' | 'column', index: number, action: 'insert' | 'delete') {
-  if (!colors) return undefined
-  const next: Record<string, TableCellColor> = {}
-  for (const [key, color] of Object.entries(colors)) {
+export function adjustCellMap<T>(cells: Record<string, T> | undefined, axis: 'row' | 'column', index: number, action: 'insert' | 'delete') {
+  if (!cells) return undefined
+  const next: Record<string, T> = {}
+  for (const [key, value] of Object.entries(cells)) {
     const match = key.match(/^(\d+):(\d+)$/)
     if (!match) continue
     let row = Number(match[1])
@@ -94,9 +94,13 @@ export function adjustCellColors(colors: Record<string, TableCellColor> | undefi
       if (axis === 'row') row += action === 'insert' ? 1 : -1
       else column += action === 'insert' ? 1 : -1
     }
-    next[`${row}:${column}`] = color
+    next[`${row}:${column}`] = value
   }
-  return next
+  return Object.keys(next).length ? next : undefined
+}
+
+export function adjustCellColors(colors: Record<string, TableCellColor> | undefined, axis: 'row' | 'column', index: number, action: 'insert' | 'delete') {
+  return adjustCellMap(colors, axis, index, action)
 }
 
 export function evaluateTable(table: Pick<TableArtifact, 'rows' | 'columns'>): CellResult[][] {
