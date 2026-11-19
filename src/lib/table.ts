@@ -1,11 +1,11 @@
 // Aeback table engine — quoted CSV, typed cells, safe arithmetic, and reference maintenance.
-import type { TableArtifact, TableColumnType } from '../types'
+import type { TableArtifact, TableCellColor, TableColumnType } from '../types'
 
 export const MAX_ROWS = 2000
 export const MAX_COLUMNS = 52
 export type CellResult = { value: string | number | boolean; error?: string }
 export const columnTypes: Array<{ value: TableColumnType; label: string }> = [
-  { value: 'text', label: '文本' }, { value: 'number', label: '数值' }, { value: 'date', label: '日期' }, { value: 'checkbox', label: '复选框' },
+  { value: 'text', label: '文本' }, { value: 'number', label: '数值' }, { value: 'select', label: '单选' }, { value: 'date', label: '日期' }, { value: 'image', label: '图片' }, { value: 'checkbox', label: '复选框' },
 ]
 
 export function inferColumnType(values: string[]): TableColumnType {
@@ -76,7 +76,27 @@ export function validateCell(value: string, type: TableColumnType) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return '日期格式应为 YYYY-MM-DD'
   }
   if (type === 'checkbox' && !/^(true|false)$/i.test(value)) return '复选框只能填写 TRUE 或 FALSE'
+  if (type === 'image' && !/^(https?:\/\/|data:image\/)/i.test(value.trim())) return '图片请使用 HTTP(S) 图片链接或图片数据 URL'
   return ''
+}
+
+export function adjustCellColors(colors: Record<string, TableCellColor> | undefined, axis: 'row' | 'column', index: number, action: 'insert' | 'delete') {
+  if (!colors) return undefined
+  const next: Record<string, TableCellColor> = {}
+  for (const [key, color] of Object.entries(colors)) {
+    const match = key.match(/^(\d+):(\d+)$/)
+    if (!match) continue
+    let row = Number(match[1])
+    let column = Number(match[2])
+    const position = axis === 'row' ? row : column
+    if (action === 'delete' && position === index) continue
+    if (position > index || (action === 'insert' && position === index)) {
+      if (axis === 'row') row += action === 'insert' ? 1 : -1
+      else column += action === 'insert' ? 1 : -1
+    }
+    next[`${row}:${column}`] = color
+  }
+  return next
 }
 
 export function evaluateTable(table: Pick<TableArtifact, 'rows' | 'columns'>): CellResult[][] {
@@ -159,7 +179,8 @@ export function evaluateTable(table: Pick<TableArtifact, 'rows' | 'columns'>): C
           if (token === 'COUNT') return { value: numbers.length }
           if (token === 'SUM') return { value: numbers.reduce((total, value) => total + value, 0) }
           if (!numbers.length) throw new Error('#DIV/0!')
-          return { value: token === 'MIN' ? Math.min(...numbers) : token === 'MAX' ? Math.max(...numbers) : numbers.reduce((total, value) => total + value, 0) / numbers.length }
+          if (token === 'MIN' || token === 'MAX') return { value: numbers.slice(1).reduce((value, current) => token === 'MIN' ? Math.min(value, current) : Math.max(value, current), numbers[0]) }
+          return { value: numbers.reduce((total, value) => total + value, 0) / numbers.length }
         }
         const number = Number(token)
         if (!Number.isFinite(number)) throw new Error('#ERROR!')

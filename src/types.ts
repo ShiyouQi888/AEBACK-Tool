@@ -71,9 +71,15 @@ export type TableArtifact = ArtifactBase & {
   columns: string[]
   rows: string[][]
   columnTypes?: TableColumnType[]
+  columnWidths?: number[]
+  groupBy?: number
+  rowHeight?: TableRowHeight
+  cellColors?: Record<string, TableCellColor>
 }
 
-export type TableColumnType = 'text' | 'number' | 'date' | 'checkbox'
+export type TableColumnType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'image'
+export type TableRowHeight = 'compact' | 'normal' | 'comfortable'
+export type TableCellColor = 'purple' | 'blue' | 'green' | 'yellow' | 'orange' | 'red'
 
 export type WorkspaceArtifact = MindMapArtifact | GraphArtifact | DocumentArtifact | TableArtifact
 

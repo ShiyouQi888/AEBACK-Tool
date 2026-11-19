@@ -1,9 +1,9 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
-import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import type { TableArtifact, TableColumnType } from '../types'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from 'react'
+import type { TableArtifact, TableCellColor, TableColumnType, TableRowHeight } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
 import { downloadText, readTextFile } from '../lib/files'
-import { adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
+import { adjustCellColors, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
 import Icon from './Icon'
 import TableImportDialog from './TableImportDialog'
 
@@ -11,6 +11,23 @@ type TableEditorProps = { artifact: TableArtifact; onChange: (artifact: TableArt
 type Address = { row: number; column: number }
 type EditingCell = Address & { draft: string; source?: 'bar' }
 const PAGE_SIZE = 100
+const DEFAULT_COLUMN_WIDTH = 180
+const MIN_COLUMN_WIDTH = 120
+const MAX_COLUMN_WIDTH = 720
+const cellColors: Array<{ value: TableCellColor; label: string }> = [
+  { value: 'purple', label: '紫色' }, { value: 'blue', label: '蓝色' }, { value: 'green', label: '绿色' },
+  { value: 'yellow', label: '黄色' }, { value: 'orange', label: '橙色' }, { value: 'red', label: '红色' },
+]
+const rowHeights: Array<{ value: TableRowHeight; label: string }> = [
+  { value: 'compact', label: '紧凑' }, { value: 'normal', label: '标准' }, { value: 'comfortable', label: '舒适' },
+]
+
+function TableImageCell({ source }: { source: string }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [source])
+  if (!source) return null
+  return failed ? <span className="table-image-fallback" title={source}>图片不可用</span> : <img className="table-image-preview" src={source} alt="表格图片" title={source} loading="lazy" onError={() => setFailed(true)} />
+}
 
 function TableEditor({ artifact, onChange }: TableEditorProps) {
   const history = useArtifactHistory(artifact, onChange)
@@ -30,6 +47,9 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const [importData, setImportData] = useState<string[][] | null>(null)
   const [firstHeader, setFirstHeader] = useState(true)
   const [importMode, setImportMode] = useState('replace')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
+  const [resizingColumnWidths, setResizingColumnWidths] = useState<number[] | null>(null)
+  const resizeRef = useRef<{ column: number; startX: number; startWidth: number; pointerId: number } | null>(null)
   const results = useMemo(() => evaluateTable(artifact), [artifact.rows, artifact.columns])
   const viewRows = useMemo(() => {
     const rows = artifact.rows.map((_, index) => index).filter((row) => {
@@ -47,7 +67,27 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   }, [artifact.rows, filterColumn, filterValue, query, results, sort])
   const currentPage = Math.min(page, Math.max(0, Math.ceil(viewRows.length / PAGE_SIZE) - 1))
   const pagedRows = viewRows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+  const visibleTableRows = useMemo(() => {
+    const groupColumn = artifact.groupBy
+    if (groupColumn === undefined || groupColumn < 0 || groupColumn >= artifact.columns.length) return pagedRows.map((row) => ({ kind: 'data' as const, row }))
+    const groups = new Map<string, { label: string; rows: number[] }>()
+    for (const row of pagedRows) {
+      const label = displayCell(results[row][groupColumn]) || '空白'
+      const key = `${groupColumn}:${JSON.stringify(label)}`
+      const group = groups.get(key) ?? { label, rows: [] }
+      group.rows.push(row)
+      groups.set(key, group)
+    }
+    const output: Array<{ kind: 'group'; key: string; label: string; count: number } | { kind: 'data'; row: number }> = []
+    for (const [key, group] of groups) {
+      output.push({ kind: 'group', key, label: group.label, count: group.rows.length })
+      if (!collapsedGroups.has(key)) output.push(...group.rows.map((row) => ({ kind: 'data' as const, row })))
+    }
+    return output
+  }, [artifact.columns.length, artifact.groupBy, collapsedGroups, pagedRows, results])
   const columnType = (index: number) => artifact.columnTypes?.[index] ?? 'text'
+  const selectOptionsByColumn = useMemo(() => artifact.columns.map((_, index) => columnType(index) === 'select' ? Array.from(new Set(artifact.rows.map((row) => row[index] ?? '').filter((value) => value && !value.startsWith('=')))) : []), [artifact.columns, artifact.columnTypes, artifact.rows])
+  const selectOptions = (index: number) => selectOptionsByColumn[index] ?? []
   const active = { row: Math.min(selected.row, Math.max(0, artifact.rows.length - 1)), column: Math.min(selected.column, Math.max(0, artifact.columns.length - 1)) }
   const selectedViewIndex = viewRows.indexOf(active.row)
   const anchorIndex = anchor ? viewRows.indexOf(anchor.row) : selectedViewIndex
@@ -91,6 +131,51 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const rowSet = new Set(selectedRows)
     commit({ ...artifact, rows: artifact.rows.map((row, index) => rowSet.has(index) ? artifact.columns.map((_, column) => column >= startColumn && column <= endColumn ? '' : row[column] ?? '') : row) })
   }
+  const applyCellColor = (color?: TableCellColor) => {
+    const colors = { ...artifact.cellColors }
+    for (const row of selectedRows) for (let column = startColumn; column <= endColumn; column += 1) {
+      const key = `${row}:${column}`
+      if (color) colors[key] = color
+      else delete colors[key]
+    }
+    commit({ ...artifact, cellColors: Object.keys(colors).length ? colors : undefined })
+  }
+  const setGroupBy = (column: number) => {
+    commit({ ...artifact, groupBy: column < 0 ? undefined : column })
+    setCollapsedGroups(new Set())
+    setPage(0)
+    setAnchor(null)
+  }
+  const setRowHeight = (rowHeight: TableRowHeight) => commit({ ...artifact, rowHeight })
+  const columnWidth = (index: number) => {
+    const width = resizingColumnWidths?.[index] ?? artifact.columnWidths?.[index] ?? DEFAULT_COLUMN_WIDTH
+    return Number.isFinite(width) ? Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width)) : DEFAULT_COLUMN_WIDTH
+  }
+  const beginColumnResize = (event: PointerEvent<HTMLButtonElement>, column: number) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const startWidth = columnWidth(column)
+    resizeRef.current = { column, startX: event.clientX, startWidth, pointerId: event.pointerId }
+    setResizingColumnWidths(Array.from({ length: artifact.columns.length }, (_, index) => columnWidth(index)))
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const updateColumnResize = (event: PointerEvent<HTMLButtonElement>) => {
+    const resize = resizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId) return
+    const width = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, resize.startWidth + event.clientX - resize.startX))
+    setResizingColumnWidths((current) => { const next = [...(current ?? artifact.columns.map((_, index) => columnWidth(index)))]; next[resize.column] = width; return next })
+  }
+  const finishColumnResize = (event: PointerEvent<HTMLButtonElement>) => {
+    const resize = resizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId) return
+    const width = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, resize.startWidth + event.clientX - resize.startX))
+    const widths = Array.from({ length: artifact.columns.length }, (_, index) => columnWidth(index))
+    widths[resize.column] = width
+    resizeRef.current = null
+    setResizingColumnWidths(null)
+    commit({ ...artifact, columnWidths: widths })
+  }
   const changeStructure = (axis: 'row' | 'column', action: 'insert' | 'delete', index: number) => {
     const count = axis === 'row' ? artifact.rows.length : artifact.columns.length
     if (action === 'insert' && count >= (axis === 'row' ? MAX_ROWS : MAX_COLUMNS)) { setMessage('已达到表格行列上限'); return }
@@ -98,15 +183,17 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     let rows = artifact.rows.map((row) => artifact.columns.map((_, column) => row[column] ?? ''))
     const columns = [...artifact.columns]
     const types = artifact.columns.map((_, column) => columnType(column))
+    const widths = axis === 'column' ? Array.from({ length: artifact.columns.length }, (_, column) => columnWidth(column)) : artifact.columnWidths
     if (axis === 'row') {
       if (action === 'insert') rows.splice(index, 0, columns.map(() => ''))
       else rows.splice(index, 1)
     } else {
-      if (action === 'insert') { columns.splice(index, 0, `列 ${columns.length + 1}`); types.splice(index, 0, 'text'); rows.forEach((row) => row.splice(index, 0, '')) }
-      else { columns.splice(index, 1); types.splice(index, 1); rows.forEach((row) => row.splice(index, 1)) }
+      if (action === 'insert') { columns.splice(index, 0, `列 ${columns.length + 1}`); types.splice(index, 0, 'text'); widths?.splice(index, 0, DEFAULT_COLUMN_WIDTH); rows.forEach((row) => row.splice(index, 0, '')) }
+      else { columns.splice(index, 1); types.splice(index, 1); widths?.splice(index, 1); rows.forEach((row) => row.splice(index, 1)) }
     }
     rows = rows.map((row) => row.map((value) => adjustFormulaReferences(value, axis, index, action)))
-    commit({ ...artifact, columns, columnTypes: types, rows })
+    const groupBy = axis !== 'column' || artifact.groupBy === undefined ? artifact.groupBy : action === 'delete' ? artifact.groupBy === index ? undefined : artifact.groupBy > index ? artifact.groupBy - 1 : artifact.groupBy : artifact.groupBy >= index ? artifact.groupBy + 1 : artifact.groupBy
+    commit({ ...artifact, columns, columnTypes: types, columnWidths: widths, rows, groupBy, cellColors: adjustCellColors(artifact.cellColors, axis, index, action) })
     setEditing(null); setAnchor(null)
     setSelected({ row: Math.min(active.row, Math.max(0, rows.length - 1)), column: Math.min(active.column, columns.length - 1) })
     if (axis === 'column') { setSort(null); setFilterColumn(-1); setFilterValue('') }
@@ -143,7 +230,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
             : translateFormulaReferences(value, target - sourceRow, active.column + column - sourceColumn)
         })
       })
-      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)) })
+      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)), columnWidths: columns.map((_, index) => columnWidth(index)) })
       setMessage(`已粘贴 ${matrix.length} 行`)
     } catch (error) { setMessage(error instanceof Error ? error.message : '粘贴失败') }
   }
@@ -153,7 +240,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     focus({ row: viewRows[index] ?? active.row, column }, extend)
   }
   const onGridKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.nativeEvent.isComposing || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
+    if (event.nativeEvent.isComposing || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLButtonElement) return
     if (event.ctrlKey || event.metaKey) {
       if (event.key.toLowerCase() === 'a') { event.preventDefault(); setAnchor({ row: viewRows[0] ?? 0, column: 0 }); setSelected({ row: viewRows.at(-1) ?? 0, column: artifact.columns.length - 1 }) }
       return
@@ -183,7 +270,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const columns = importMode === 'append' ? artifact.columns : Array.from({ length: width }, (_, column) => firstHeader ? importData[0][column]?.trim() || `列 ${column + 1}` : `列 ${column + 1}`)
     const appendedRows = importMode === 'append' ? artifact.rows.length : 0
     const rows = values.map((row) => columns.map((_, column) => translateFormulaReferences(row[column] ?? '', appendedRows, 0)))
-    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))) })
+    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))), columnWidths: importMode === 'append' ? artifact.columnWidths : undefined, cellColors: importMode === 'append' ? artifact.cellColors : undefined, groupBy: importMode === 'append' ? artifact.groupBy : undefined })
     setSort(null); setQuery(''); setFilterColumn(-1); setFilterValue(''); setPage(0); setAnchor(null); setSelected({ row: 0, column: 0 }); setImportData(null)
     setMessage(`已导入 ${values.length} 行`)
   }
@@ -204,14 +291,28 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   }}>
     <div className="editor-commandbar">
       <div className="editor-command-group"><button className="tool-button" type="button" aria-label="撤销" disabled={!history.canUndo} onClick={() => { setEditing(null); history.undo() }}><Icon name="undo" size={16} /></button><button className="tool-button" type="button" aria-label="重做" disabled={!history.canRedo} onClick={() => { setEditing(null); history.redo() }}><Icon name="redo" size={16} /></button><label className="table-search"><Icon name="search" size={15} /><input aria-label="搜索表格" placeholder="搜索" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); setAnchor(null) }} /></label></div>
-      <div className="editor-command-group"><button className="tool-button" type="button" onClick={() => fileRef.current?.click()}>导入 CSV</button><details className="editor-menu"><summary>导出</summary><div><button type="button" onClick={() => exportCsv(false)}>CSV · 当前视图值</button><button type="button" onClick={() => exportCsv(true)}>CSV · 全表原始值与公式</button></div></details><button className="tool-button" type="button" disabled={artifact.columns.length >= MAX_COLUMNS} onClick={() => changeStructure('column', 'insert', artifact.columns.length)}><Icon name="column" size={15} />列</button><button className="tool-button tool-button--accent" type="button" disabled={artifact.rows.length >= MAX_ROWS} onClick={() => changeStructure('row', 'insert', artifact.rows.length)}><Icon name="plus" size={15} />行</button></div>
+      <div className="editor-command-group table-command-actions">
+        <details className="editor-menu table-group-menu"><summary className={artifact.groupBy !== undefined ? 'tool-button--active' : ''}>分组</summary><div><button type="button" onClick={() => setGroupBy(-1)}>取消分组</button>{artifact.columns.map((column, index) => <button key={index} type="button" onClick={() => setGroupBy(index)}>按 {columnName(index)} · {column} 分组</button>)}</div></details>
+        <details className="editor-menu table-settings-menu"><summary>表格设置</summary><div><span className="table-menu-label">行高</span>{rowHeights.map((height) => <button key={height.value} type="button" aria-pressed={(artifact.rowHeight ?? 'normal') === height.value} onClick={() => setRowHeight(height.value)}>{height.label}</button>)}</div></details>
+        <details className="editor-menu table-fill-menu"><summary title="为选区填色">填色</summary><div><span className="table-menu-label">选区颜色</span><div className="table-color-options">{cellColors.map((color) => <button key={color.value} type="button" className="table-color-swatch" data-fill={color.value} aria-label={`${color.label}填色`} title={color.label} onClick={() => applyCellColor(color.value)} />)}</div><button type="button" onClick={() => applyCellColor()}>清除填色</button></div></details>
+        <button className="tool-button" type="button" onClick={() => fileRef.current?.click()}>导入 CSV</button>
+        <details className="editor-menu"><summary>导出</summary><div><button type="button" onClick={() => exportCsv(false)}>CSV · 当前视图值</button><button type="button" onClick={() => exportCsv(true)}>CSV · 全表原始值与公式</button></div></details>
+        <button className="tool-button" type="button" disabled={artifact.columns.length >= MAX_COLUMNS} onClick={() => changeStructure('column', 'insert', artifact.columns.length)}><Icon name="column" size={15} />列</button>
+        <button className="tool-button tool-button--accent" type="button" disabled={artifact.rows.length >= MAX_ROWS} onClick={() => changeStructure('row', 'insert', artifact.rows.length)}><Icon name="plus" size={15} />行</button>
+      </div>
     </div>
     <div className="table-viewbar"><select aria-label="筛选列" value={filterColumn} onChange={(event) => { setFilterColumn(Number(event.target.value)); setPage(0); setAnchor(null) }}><option value={-1}>筛选列</option>{artifact.columns.map((column, index) => <option value={index} key={index}>{columnName(index)} · {column}</option>)}</select>{filterColumn >= 0 && <input aria-label="筛选内容" placeholder="包含内容" value={filterValue} onChange={(event) => { setFilterValue(event.target.value); setPage(0); setAnchor(null) }} />}{(query || filterColumn >= 0 || sort) && <button className="tool-button" type="button" onClick={() => { setQuery(''); setFilterColumn(-1); setFilterValue(''); setSort(null); setAnchor(null) }}>重置视图</button>}<span>{viewRows.length} / {artifact.rows.length} 行 · {artifact.columns.length} 列</span></div>
     <div className="table-formulabar"><span>{columnName(active.column)}{active.row + 1}</span><span>ƒx</span><input aria-label="单元格值或公式" placeholder="输入值或 =SUM(B1:B3)" value={editing?.draft ?? artifact.rows[active.row]?.[active.column] ?? ''} disabled={!artifact.rows.length} onChange={(event) => setEditing({ ...active, draft: event.target.value, source: 'bar' })} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finishEdit(); focus(active) } if (event.key === 'Escape') { setEditing(null); focus(active) } }} /><details className="editor-menu formula-help"><summary aria-label="公式帮助">?</summary><div><p>支持 A1、$A$1 和 A1:B5 引用</p><p>+ − * / ^ 与括号</p><p>SUM · AVERAGE · MIN · MAX · COUNT · ROUND · ABS</p><p>排序仅改变视图；公式坐标使用左侧原始行号。</p><p>Shift + 方向键选区；复制 / 粘贴可与 Excel 互通。</p></div></details></div>
     <div ref={gridRef} className="table-scroll" onKeyDown={onGridKey} onCopy={onCopy} onPaste={onPaste}>
-      <table className="smart-table" role="grid" aria-label="Aeback 智能表格" aria-rowcount={viewRows.length + 1} aria-colcount={artifact.columns.length + 1} style={{ minWidth: 48 + artifact.columns.length * 180 }}>
-        <thead><tr><th className="table-row-number" aria-label="原始行号">#</th>{artifact.columns.map((column, columnIndex) => <th key={columnIndex} aria-sort={sort?.column === columnIndex ? sort.direction === 1 ? 'ascending' : 'descending' : 'none'}><div className="table-column-heading"><span>{columnName(columnIndex)}</span><input aria-label={`第 ${columnIndex + 1} 列标题`} value={column} onChange={(event) => commit({ ...artifact, columns: artifact.columns.map((item, index) => index === columnIndex ? event.target.value : item) }, `heading-${columnIndex}`)} /><button type="button" aria-label={`排序第 ${columnIndex + 1} 列`} title="升序 / 降序 / 原始顺序" onClick={() => { setSort(sort?.column === columnIndex ? sort.direction === 1 ? { column: columnIndex, direction: -1 } : null : { column: columnIndex, direction: 1 }); setAnchor(null); setPage(0) }}>{sort?.column === columnIndex ? sort.direction === 1 ? '↑' : '↓' : '↕'}</button></div><div className="table-column-settings"><select aria-label={`第 ${columnIndex + 1} 列类型`} value={columnType(columnIndex)} onChange={(event) => commit({ ...artifact, columnTypes: artifact.columns.map((_, index) => index === columnIndex ? event.target.value as TableColumnType : columnType(index)) })}>{columnTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><details className="editor-menu"><summary aria-label={`第 ${columnIndex + 1} 列操作`}>···</summary><div><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex)}>左侧插入列</button><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex + 1)}>右侧插入列</button><button type="button" disabled={artifact.columns.length <= 1} onClick={() => changeStructure('column', 'delete', columnIndex)}>删除列</button></div></details></div></th>)}<th className="table-actions-head" /></tr></thead>
-        <tbody>{pagedRows.map((rowIndex) => <tr key={rowIndex} aria-rowindex={viewRows.indexOf(rowIndex) + 2}><th className="table-row-number" scope="row"><button type="button" aria-label={`选择第 ${rowIndex + 1} 行`} onClick={() => { setAnchor({ row: rowIndex, column: 0 }); setSelected({ row: rowIndex, column: artifact.columns.length - 1 }) }}>{rowIndex + 1}</button></th>{artifact.columns.map((_, columnIndex) => {
+      <table className={`smart-table table-density--${artifact.rowHeight ?? 'normal'}${resizingColumnWidths ? ' table-column-resizing' : ''}`} role="grid" aria-label="Aeback 智能表格" aria-rowcount={viewRows.length + 1} aria-colcount={artifact.columns.length + 1} style={{ minWidth: 79 + artifact.columns.reduce((total, _, index) => total + columnWidth(index), 0) }}>
+        <thead><tr><th className="table-row-number" aria-label="原始行号">#</th>{artifact.columns.map((column, columnIndex) => <th key={columnIndex} style={{ width: columnWidth(columnIndex) }} aria-sort={sort?.column === columnIndex ? sort.direction === 1 ? 'ascending' : 'descending' : 'none'}><div className="table-column-heading"><span>{columnName(columnIndex)}</span><input aria-label={`第 ${columnIndex + 1} 列标题`} value={column} onChange={(event) => commit({ ...artifact, columns: artifact.columns.map((item, index) => index === columnIndex ? event.target.value : item) }, `heading-${columnIndex}`)} /><button type="button" aria-label={`排序第 ${columnIndex + 1} 列`} title="升序 / 降序 / 原始顺序" onClick={() => { setSort(sort?.column === columnIndex ? sort.direction === 1 ? { column: columnIndex, direction: -1 } : null : { column: columnIndex, direction: 1 }); setAnchor(null); setPage(0) }}>{sort?.column === columnIndex ? sort.direction === 1 ? '↑' : '↓' : '↕'}</button></div><div className="table-column-settings"><select aria-label={`第 ${columnIndex + 1} 列类型`} value={columnType(columnIndex)} onChange={(event) => commit({ ...artifact, columnTypes: artifact.columns.map((_, index) => index === columnIndex ? event.target.value as TableColumnType : columnType(index)) })}>{columnTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><details className="editor-menu"><summary aria-label={`第 ${columnIndex + 1} 列操作`}>···</summary><div><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex)}>左侧插入列</button><button type="button" onClick={() => changeStructure('column', 'insert', columnIndex + 1)}>右侧插入列</button><button type="button" disabled={artifact.columns.length <= 1} onClick={() => changeStructure('column', 'delete', columnIndex)}>删除列</button></div></details></div><button className="table-resize-handle" type="button" aria-label={`调整第 ${columnIndex + 1} 列宽度`} title="拖动调整列宽" onPointerDown={(event) => beginColumnResize(event, columnIndex)} onPointerMove={updateColumnResize} onPointerUp={finishColumnResize} onPointerCancel={finishColumnResize} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); const widths = Array.from({ length: artifact.columns.length }, (_, index) => columnWidth(index)); widths[columnIndex] = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, widths[columnIndex] + (event.key === 'ArrowRight' ? 16 : -16))); commit({ ...artifact, columnWidths: widths }) } }} /></th>)}<th className="table-actions-head"><button type="button" aria-label="添加列" title="添加属性列" disabled={artifact.columns.length >= MAX_COLUMNS} onClick={() => changeStructure('column', 'insert', artifact.columns.length)}><Icon name="plus" size={14} /></button></th></tr></thead>
+        <tbody>{visibleTableRows.map((entry) => {
+          if (entry.kind === 'group') {
+            const collapsed = collapsedGroups.has(entry.key)
+            return <tr key={entry.key} className="table-group-row"><th colSpan={artifact.columns.length + 2}><button type="button" aria-expanded={!collapsed} onClick={() => setCollapsedGroups((current) => { const next = new Set(current); if (next.has(entry.key)) next.delete(entry.key); else next.add(entry.key); return next })}><span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>{entry.label}<small>{entry.count}</small></button></th></tr>
+          }
+          const rowIndex = entry.row
+          return <tr key={rowIndex} aria-rowindex={viewRows.indexOf(rowIndex) + 2}><th className="table-row-number" scope="row"><button type="button" aria-label={`选择第 ${rowIndex + 1} 行`} onClick={() => { setAnchor({ row: rowIndex, column: 0 }); setSelected({ row: rowIndex, column: artifact.columns.length - 1 }) }}>{rowIndex + 1}</button></th>{artifact.columns.map((_, columnIndex) => {
           const address = { row: rowIndex, column: columnIndex }
           const isActive = active.row === rowIndex && active.column === columnIndex
           const inRange = selectedRows.includes(rowIndex) && columnIndex >= startColumn && columnIndex <= endColumn
@@ -219,15 +320,17 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
           const raw = artifact.rows[rowIndex][columnIndex] ?? ''
           const result = results[rowIndex][columnIndex]
           const error = result.error ?? validateCell(raw, columnType(columnIndex))
-          return <td key={columnIndex} role="gridcell" data-cell={`${rowIndex}:${columnIndex}`} aria-selected={inRange} aria-invalid={Boolean(error)} tabIndex={isActive ? 0 : -1} className={`${inRange ? 'table-cell--selected ' : ''}${isActive ? 'table-cell--active ' : ''}${error ? 'table-cell--error ' : ''}${typeof result.value === 'number' ? 'table-cell--numeric' : ''}`} title={error || (raw.startsWith('=') ? raw : undefined)} onClick={(event) => { if (!isEditing) focus(address, event.shiftKey, true) }} onDoubleClick={() => edit(address)}>
-            {isEditing ? <input className="table-cell-editor" type={columnType(columnIndex) === 'date' && !raw.startsWith('=') ? 'date' : 'text'} aria-label={`编辑 ${columnName(columnIndex)}${rowIndex + 1}`} value={editing.draft} autoFocus onChange={(event) => setEditing({ ...editing, draft: event.target.value })} onClick={(event) => event.stopPropagation()} onBlur={finishEdit} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); finishEdit(); if (event.key === 'Enter') move(event.shiftKey ? -1 : 1, 0); else move(0, event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.preventDefault(); editingRef.current = null; setEditing(null); focus(address) } }} /> : columnType(columnIndex) === 'checkbox' && !raw.startsWith('=') && !error ? <input type="checkbox" aria-label={`切换 ${columnName(columnIndex)}${rowIndex + 1}`} checked={raw.toUpperCase() === 'TRUE'} onClick={(event) => event.stopPropagation()} onChange={(event) => { setSelected(address); setCell(address, event.target.checked ? 'TRUE' : 'FALSE') }} /> : <span>{displayCell(result)}</span>}
+          return <td key={columnIndex} style={{ width: columnWidth(columnIndex) }} role="gridcell" data-cell={`${rowIndex}:${columnIndex}`} data-fill={artifact.cellColors?.[`${rowIndex}:${columnIndex}`]} aria-selected={inRange} aria-invalid={Boolean(error)} tabIndex={isActive ? 0 : -1} className={`${inRange ? 'table-cell--selected ' : ''}${isActive ? 'table-cell--active ' : ''}${error ? 'table-cell--error ' : ''}${typeof result.value === 'number' ? 'table-cell--numeric' : ''}`} title={error || (raw.startsWith('=') ? raw : undefined)} onClick={(event) => { if (!isEditing) focus(address, event.shiftKey, true) }} onDoubleClick={() => edit(address)}>
+            {isEditing ? <input className="table-cell-editor" list={columnType(columnIndex) === 'select' ? `aeback-${artifact.id}-select-${columnIndex}` : undefined} type={columnType(columnIndex) === 'date' && !raw.startsWith('=') ? 'date' : columnType(columnIndex) === 'image' ? 'url' : 'text'} aria-label={`编辑 ${columnName(columnIndex)}${rowIndex + 1}`} value={editing.draft} autoFocus onChange={(event) => setEditing({ ...editing, draft: event.target.value })} onClick={(event) => event.stopPropagation()} onBlur={finishEdit} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); finishEdit(); if (event.key === 'Enter') move(event.shiftKey ? -1 : 1, 0); else move(0, event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.preventDefault(); editingRef.current = null; setEditing(null); focus(address) } }} /> : columnType(columnIndex) === 'checkbox' && !raw.startsWith('=') && !error ? <input type="checkbox" aria-label={`切换 ${columnName(columnIndex)}${rowIndex + 1}`} checked={raw.toUpperCase() === 'TRUE'} onClick={(event) => event.stopPropagation()} onChange={(event) => { setSelected(address); setCell(address, event.target.checked ? 'TRUE' : 'FALSE') }} /> : columnType(columnIndex) === 'select' && !raw.startsWith('=') ? <span className="table-select-value" data-tone={Math.max(0, selectOptions(columnIndex).indexOf(raw)) % 6}>{displayCell(result)}</span> : columnType(columnIndex) === 'image' && !raw.startsWith('=') && !error ? <TableImageCell source={raw} /> : <span>{displayCell(result)}</span>}
           </td>
-        })}<td className="table-row-action"><details className="editor-menu"><summary aria-label={`第 ${rowIndex + 1} 行操作`}>···</summary><div><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex)}>上方插入行</button><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex + 1)}>下方插入行</button><button type="button" onClick={() => changeStructure('row', 'delete', rowIndex)}>删除行</button></div></details></td></tr>)}</tbody>
+        })}<td className="table-row-action"><details className="editor-menu"><summary aria-label={`第 ${rowIndex + 1} 行操作`}>···</summary><div><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex)}>上方插入行</button><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex + 1)}>下方插入行</button><button type="button" onClick={() => changeStructure('row', 'delete', rowIndex)}>删除行</button></div></details></td></tr>
+        })}</tbody>
         <tfoot><tr><th className="table-row-number">Σ</th>{artifact.columns.map((_, column) => {
           const numbers = viewRows.map((row) => results[row][column]).filter((cell) => !cell.error && typeof cell.value === 'number').map((cell) => Number(cell.value))
           return <td key={column} title="当前视图数值合计">{numbers.length ? displayCell({ value: numbers.reduce((sum, value) => sum + value, 0) }) : ''}</td>
         })}<td /></tr></tfoot>
       </table>
+      {artifact.columns.map((_, column) => columnType(column) === 'select' ? <datalist key={column} id={`aeback-${artifact.id}-select-${column}`}>{selectOptions(column).map((option) => <option value={option} key={option} />)}</datalist> : null)}
       {!viewRows.length && <div className="table-empty">{artifact.rows.length ? '没有匹配的行' : <button className="tool-button" type="button" onClick={() => changeStructure('row', 'insert', 0)}>添加第一行</button>}</div>}
     </div>
     <footer className="editor-statusbar"><span role="status">{message || (selectedNumbers.length ? `计数 ${selectedRows.length * (endColumn - startColumn + 1)} · 合计 ${displayCell({ value: selectedNumbers.reduce((sum, value) => sum + value, 0) })} · 平均 ${displayCell({ value: selectedNumbers.reduce((sum, value) => sum + value, 0) / selectedNumbers.length })}` : '双击编辑 · Enter 确认 · Shift + 方向键选区')}</span><div><button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button><span>{currentPage + 1} / {Math.max(1, Math.ceil(viewRows.length / PAGE_SIZE))}</span><button type="button" disabled={(currentPage + 1) * PAGE_SIZE >= viewRows.length} onClick={() => setPage(currentPage + 1)}>下一页</button></div></footer>
