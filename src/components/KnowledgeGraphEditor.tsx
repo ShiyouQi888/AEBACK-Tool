@@ -48,59 +48,46 @@ function createId() {
 
 const articleHierarchyRelations = new Set(['章节', '包含', '要点'])
 
-function getArticleHierarchy(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[]) {
+function getGraphHierarchy(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], articleStructure = false) {
   const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
   const depths = new Map<string, number>()
   const children = new Map(nodes.map((node) => [node.id, [] as string[]]))
   if (!root) return { depths, children }
   const outgoing = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]))
   edges.forEach((edge) => {
-    if (articleHierarchyRelations.has(edge.label ?? '') && outgoing.has(edge.fromId) && outgoing.has(edge.toId)) outgoing.get(edge.fromId)?.push(edge.toId)
+    if (!outgoing.has(edge.fromId) || !outgoing.has(edge.toId)) return
+    adjacency.get(edge.fromId)?.push(edge.toId)
+    adjacency.get(edge.toId)?.push(edge.fromId)
+    if (articleStructure && articleHierarchyRelations.has(edge.label ?? '')) outgoing.get(edge.fromId)?.push(edge.toId)
   })
   depths.set(root.id, 0)
-  const queue = [root.id]
-  for (let cursor = 0; cursor < queue.length; cursor += 1) {
-    const parentId = queue[cursor]
-    for (const childId of outgoing.get(parentId) ?? []) {
-      if (depths.has(childId)) continue
-      depths.set(childId, (depths.get(parentId) ?? 0) + 1)
-      children.get(parentId)?.push(childId)
-      queue.push(childId)
+  const expand = (starts: string[], graph: Map<string, string[]>) => {
+    const queue = starts
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const parentId = queue[cursor]
+      for (const childId of graph.get(parentId) ?? []) {
+        if (depths.has(childId)) continue
+        depths.set(childId, (depths.get(parentId) ?? 0) + 1)
+        children.get(parentId)?.push(childId)
+        queue.push(childId)
+      }
     }
   }
-  // Keep orphan nodes in a nearby source branch, while leaving links between known nodes as cross-links.
+  expand([root.id], articleStructure ? outgoing : adjacency)
+  // Keep disconnected components visible, and place them beside the first branch they link to.
   nodes.forEach((node) => {
     if (depths.has(node.id)) return
-    const parentId = edges.find((edge) => edge.toId === node.id && edge.fromId !== node.id && depths.has(edge.fromId))?.fromId ?? root.id
+    const parentId = adjacency.get(node.id)?.find((neighborId) => depths.has(neighborId)) ?? root.id
     depths.set(node.id, (depths.get(parentId) ?? 0) + 1)
     children.get(parentId)?.push(node.id)
+    expand([node.id], adjacency)
   })
   return { depths, children }
 }
 
 function getGraphDepths(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], articleStructure = false) {
-  if (articleStructure) return getArticleHierarchy(nodes, rootId, edges).depths
-  const depths = new Map<string, number>()
-  const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
-  if (!root) return depths
-  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]))
-  edges.forEach((edge) => {
-    adjacency.get(edge.fromId)?.push(edge.toId)
-    adjacency.get(edge.toId)?.push(edge.fromId)
-  })
-  depths.set(root.id, 0)
-  const queue = [root.id]
-  for (let cursor = 0; cursor < queue.length; cursor += 1) {
-    const id = queue[cursor]
-    for (const nextId of adjacency.get(id) ?? []) {
-      if (depths.has(nextId)) continue
-      depths.set(nextId, (depths.get(id) ?? 0) + 1)
-      queue.push(nextId)
-    }
-  }
-  const maxDepth = Math.max(1, ...depths.values())
-  nodes.forEach((node) => { if (!depths.has(node.id)) depths.set(node.id, maxDepth + 1) })
-  return depths
+  return getGraphHierarchy(nodes, rootId, edges, articleStructure).depths
 }
 
 function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], width: number, height: number, offsetX = 0, offsetY = 0, articleStructure = false) {
@@ -108,68 +95,51 @@ function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: Knowledge
   const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
   if (!root) return positions
   const center = { x: offsetX + width / 2, y: offsetY + height / 2 }
-  if (articleStructure) {
-    const { depths, children } = getArticleHierarchy(nodes, root.id, edges)
-    const ranges = new Map<string, { first: number; last: number }>()
-    let leafCount = 0
-    const collectRanges = (id: string): { first: number; last: number } => {
-      const descendants = children.get(id) ?? []
-      if (!descendants.length) {
-        const slot = leafCount++
-        const range = { first: slot, last: slot }
-        ranges.set(id, range)
-        return range
-      }
-      const childRanges = descendants.map(collectRanges)
-      const range = { first: childRanges[0].first, last: childRanges[childRanges.length - 1].last }
+  const { depths, children } = getGraphHierarchy(nodes, root.id, edges, articleStructure)
+  const ranges = new Map<string, { first: number; last: number }>()
+  let leafCount = 0
+  const collectRanges = (id: string): { first: number; last: number } => {
+    const descendants = children.get(id) ?? []
+    if (!descendants.length) {
+      const slot = leafCount++
+      const range = { first: slot, last: slot }
       ranges.set(id, range)
       return range
     }
-    collectRanges(root.id)
-    const totalLeaves = Math.max(1, leafCount)
-    const angleFor = (node: KnowledgeNode) => {
-      const range = ranges.get(node.id) ?? { first: 0, last: 0 }
-      const slot = (range.first + range.last) / 2
-      return -Math.PI / 2 + ((slot + .5) / totalLeaves) * Math.PI * 2
-    }
-    const depthGroups = new Map<number, KnowledgeNode[]>()
-    nodes.filter((node) => node.id !== root.id).forEach((node) => {
-      const depth = depths.get(node.id) ?? 1
-      depthGroups.set(depth, [...(depthGroups.get(depth) ?? []), node])
-    })
-    positions.set(root.id, center)
-    let previousRadius = 0
-    ;[...depthGroups.keys()].sort((a, b) => a - b).forEach((depth) => {
-      const group = depthGroups.get(depth) ?? []
-      const angles = group.map(angleFor).map((angle) => (angle + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b)
-      let minGap = Math.PI * 2
-      if (angles.length > 1) minGap = Math.min(...angles.map((angle, index) => {
-        const next = angles[(index + 1) % angles.length] + (index === angles.length - 1 ? Math.PI * 2 : 0)
-        return next - angle
-      }))
-      const minSeparationRadius = angles.length > 1 ? 112 / Math.max(.001, 2 * Math.sin(Math.min(Math.PI, minGap) / 2)) : 0
-      const radius = Math.max(230 + (depth - 1) * 168, previousRadius + 156, minSeparationRadius)
-      group.forEach((node) => {
-        const angle = angleFor(node)
-        positions.set(node.id, { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius })
-      })
-      previousRadius = radius
-    })
-    return positions
+    const childRanges = descendants.map(collectRanges)
+    const range = { first: childRanges[0].first, last: childRanges[childRanges.length - 1].last }
+    ranges.set(id, range)
+    return range
   }
-  const depths = getGraphDepths(nodes, root.id, edges)
-  const rings = new Map<number, KnowledgeNode[]>()
+  collectRanges(root.id)
+  const totalLeaves = Math.max(1, leafCount)
+  const angleFor = (node: KnowledgeNode) => {
+    const range = ranges.get(node.id) ?? { first: 0, last: 0 }
+    const slot = (range.first + range.last) / 2
+    return -Math.PI / 2 + ((slot + .5) / totalLeaves) * Math.PI * 2
+  }
+  const depthGroups = new Map<number, KnowledgeNode[]>()
   nodes.filter((node) => node.id !== root.id).forEach((node) => {
     const depth = depths.get(node.id) ?? 1
-    rings.set(depth, [...(rings.get(depth) ?? []), node])
+    depthGroups.set(depth, [...(depthGroups.get(depth) ?? []), node])
   })
   positions.set(root.id, center)
-  rings.forEach((ring, depth) => {
-    const radius = Math.max(190, Math.min(width * .39, height * .38), ring.length * 78) + (depth - 1) * 170
-    ring.forEach((node, index) => {
-      const angle = index / Math.max(ring.length, 1) * Math.PI * 2 - Math.PI / 2
+  let previousRadius = 0
+  ;[...depthGroups.keys()].sort((a, b) => a - b).forEach((depth) => {
+    const group = depthGroups.get(depth) ?? []
+    const angles = group.map(angleFor).map((angle) => (angle + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b)
+    let minGap = Math.PI * 2
+    if (angles.length > 1) minGap = Math.min(...angles.map((angle, index) => {
+      const next = angles[(index + 1) % angles.length] + (index === angles.length - 1 ? Math.PI * 2 : 0)
+      return next - angle
+    }))
+    const minSeparationRadius = angles.length > 1 ? 112 / Math.max(.001, 2 * Math.sin(Math.min(Math.PI, minGap) / 2)) : 0
+    const radius = Math.max(230 + (depth - 1) * 168, previousRadius + 156, minSeparationRadius)
+    group.forEach((node) => {
+      const angle = angleFor(node)
       positions.set(node.id, { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius })
     })
+    previousRadius = radius
   })
   return positions
 }
@@ -645,9 +615,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         <div className="canvas-tool-separator" />
         <div className="graph-tool-group graph-line-style-controls" role="group" aria-label="关系线样式">{lineStyles.map(({ value, label, icon }) => <button className={`direction-button${connectionStyle === value ? ' direction-button--active' : ''}`} type="button" key={value} aria-label={label} title={label} aria-pressed={connectionStyle === value} onClick={() => setConnectionStyle(value)}><Icon name={icon} size={16} /></button>)}</div>
         <div className="canvas-tool-separator" />
-        <div className="graph-tool-group" role="group" aria-label="画布布局"><button className="direction-button" type="button" aria-label="整理图谱布局" title="整理图谱布局" onClick={arrangeGraph}><Icon name="arrange" size={16} /></button></div>
+        <div className="graph-tool-group" role="group" aria-label="画布布局"><button className="direction-button" type="button" aria-label="有序整理图谱节点" title="有序整理" onClick={arrangeGraph}><Icon name="arrange" size={16} /></button></div>
       </div>
-      <div className="canvas-zoom" role="toolbar" aria-label="画布缩放"><button type="button" aria-label="放大" onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label="缩小" onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label="整理视图" title="整理视图" onClick={arrangeGraph}><Icon name="grid" size={15} /></button><i /><span className="canvas-node-count">{artifact.nodes.length} 节点 · {artifact.edges.length} 关系</span></div>
+      <div className="canvas-zoom" role="toolbar" aria-label="画布缩放"><button type="button" aria-label="放大" onClick={canvas.zoomIn}>+</button><span>{Math.round(canvas.camera.zoom * 100)}%</span><button type="button" aria-label="缩小" onClick={canvas.zoomOut}>−</button><i /><button type="button" aria-label="有序整理视图" title="有序整理布局" onClick={arrangeGraph}><Icon name="grid" size={15} /></button><i /><span className="canvas-node-count">{artifact.nodes.length} 节点 · {artifact.edges.length} 关系</span></div>
       {selected && <aside className="canvas-inspector" aria-label="图谱节点属性">
         <div className="canvas-inspector-heading"><span>节点</span><div className="canvas-inspector-actions"><button type="button" aria-label="定位节点" title="定位节点" onClick={fitSelected}><Icon name="mindmap" size={15} /></button>{selected.id !== rootNode.id && <button type="button" aria-label="删除节点" title="删除节点" onClick={deleteNode}><Icon name="trash" size={15} /></button>}</div></div>
         <label className="canvas-label" htmlFor="graph-node-name">名称</label>
