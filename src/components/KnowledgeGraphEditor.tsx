@@ -39,6 +39,8 @@ const lineStyles: Array<{ value: GraphLineStyle; label: string; icon: IconName }
 ]
 type KnowledgeSide = 'up' | 'right' | 'down' | 'left'
 const sideLabels: Record<KnowledgeSide, string> = { up: '上方', right: '右侧', down: '下方', left: '左侧' }
+type GraphConnectionPreview = { fromId: string; fromSide: KnowledgeSide; start: { x: number; y: number }; end: { x: number; y: number }; targetId?: string }
+type GraphConnectionDrag = GraphConnectionPreview & { pointerId: number; startClientX: number; startClientY: number; moved: boolean }
 
 function createId() {
   return `knowledge-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`
@@ -99,12 +101,32 @@ function getGraphRadius(depth: number) {
   return 54 / (1 + 0.1 * (Math.max(1, depth) - 1))
 }
 
-function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, toward: { x: number; y: number }, rootId: string, depth: number) {
+function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, toward: { x: number; y: number }, rootId: string, depth: number, side?: KnowledgeSide) {
+  if (side) {
+    const half = getNodeHalfSize(node, rootId, depth)
+    if (side === 'up') return { x: center.x, y: center.y - half.height }
+    if (side === 'right') return { x: center.x + half.width, y: center.y }
+    if (side === 'down') return { x: center.x, y: center.y + half.height }
+    return { x: center.x - half.width, y: center.y }
+  }
   const dx = toward.x - center.x
   const dy = toward.y - center.y
   const length = Math.max(1, Math.hypot(dx, dy))
   const half = getNodeHalfSize(node, rootId, depth)
   return { x: center.x + dx / length * half.width, y: center.y + dy / length * half.height }
+}
+
+function getGraphPath(start: { x: number; y: number }, end: { x: number; y: number }, style: GraphLineStyle) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const midpointX = (start.x + end.x) / 2
+  const midpointY = (start.y + end.y) / 2
+  if (style === 'orthogonal') {
+    return Math.abs(dx) >= Math.abs(dy)
+      ? `M ${start.x} ${start.y} L ${midpointX} ${start.y} L ${midpointX} ${end.y} L ${end.x} ${end.y}`
+      : `M ${start.x} ${start.y} L ${start.x} ${midpointY} L ${end.x} ${midpointY} L ${end.x} ${end.y}`
+  }
+  return `M ${start.x} ${start.y} Q ${midpointX - dy * .12} ${midpointY + dx * .12} ${end.x} ${end.y}`
 }
 
 function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportArticle, theme, onToggleTheme }: KnowledgeGraphEditorProps) {
@@ -127,14 +149,24 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const [importOpen, setImportOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchMatchIndex, setSearchMatchIndex] = useState(-1)
   const [exportNotice, setExportNotice] = useState('')
+  const [connectionPreview, setConnectionPreview] = useState<GraphConnectionPreview | null>(null)
   const projectFileRef = useRef<HTMLInputElement>(null)
   const exportMenuRef = useRef<HTMLDetailsElement>(null)
+  const connectionDragRef = useRef<GraphConnectionDrag | null>(null)
+  const suppressAddHandleClickRef = useRef(false)
   const nodeById = useMemo(() => new Map(artifact.nodes.map((node) => [node.id, node] as const)), [artifact.nodes])
+  const nodeIndexById = useMemo(() => new Map(artifact.nodes.map((node, index) => [node.id, index] as const)), [artifact.nodes])
   const nodeOrderKey = artifact.nodes.map((node) => node.id).join('\u0000')
   const selected = nodeById.get(selectedId) ?? root
   const connectionStyle = artifact.connectionStyle ?? 'curve'
   const graphDepths = useMemo(() => getGraphDepths(artifact.nodes, artifact.rootId, artifact.edges), [nodeOrderKey, artifact.edges, artifact.rootId])
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase()
+    if (!query) return []
+    return artifact.nodes.filter((node) => [node.text, node.description ?? '', node.source ?? '', kindLabels[node.kind ?? 'concept']].join(' ').toLocaleLowerCase().includes(query))
+  }, [artifact.nodes, searchQuery])
   const fallbackPositions = useMemo(() => getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY), [nodeOrderKey, artifact.edges, artifact.rootId, layoutBounds])
   const positionFor = (node: KnowledgeNode) => ({ x: node.x ?? fallbackPositions.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallbackPositions.get(node.id)?.y ?? size.height / 2 })
   const moveNode = (id: string, x: number, y: number) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })
@@ -199,9 +231,11 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
       x += offset.x === 0 ? 0 : Math.sign(offset.x) * 214
       y += offset.y === 0 ? 0 : Math.sign(offset.y) * 142
     }
-    const node: KnowledgeNode = { id: createId(), text: '新知识点', kind: 'concept', x, y, color: palette[artifact.nodes.length % palette.length]?.value ?? 'blue' }
+    const parentIndex = artifact.nodes.indexOf(parent)
+    const inheritedColor = parent.color ?? (parent.id === rootNode.id ? 'green' : palette[Math.max(0, parentIndex) % palette.length]?.value ?? 'blue')
+    const node: KnowledgeNode = { id: createId(), text: '新知识点', kind: 'concept', x, y, color: inheritedColor }
     const relation = edgeLabel.trim() || '相关'
-    const edge: KnowledgeEdge = { id: createId(), fromId: parentId, toId: node.id, label: relation, directed: relation !== '相关' }
+    const edge: KnowledgeEdge = { id: createId(), fromId: parentId, toId: node.id, fromSide: side, label: relation, directed: relation !== '相关' }
     onChange({ ...artifact, nodes: [...artifact.nodes, node], edges: [...artifact.edges, edge] })
     setSelectedId(node.id)
     setSelectedEdgeId('')
@@ -209,13 +243,90 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
 
   const addNode = () => addDirectionalNode(selected?.id ?? rootNode.id, 'right')
 
-  const addConnection = () => {
-    if (!selected || !targetId || targetId === selected.id) return
-    const exists = artifact.edges.some((edge) => edge.fromId === selected.id && edge.toId === targetId)
-    if (exists) return
+  const connectNodes = (fromId: string, toId: string, fromSide?: KnowledgeSide) => {
+    if (fromId === toId) return false
+    const source = nodeById.get(fromId)
+    const target = nodeById.get(toId)
+    if (!source || !target) return false
     const relation = edgeLabel.trim() || '相关'
-    onChange({ ...artifact, edges: [...artifact.edges, { id: createId(), fromId: selected.id, toId: targetId, label: relation, directed: relation !== '相关' }] })
+    const existing = artifact.edges.find((edge) => (edge.label ?? '相关') === relation && (
+      relation === '相关'
+        ? (edge.fromId === fromId && edge.toId === toId) || (edge.fromId === toId && edge.toId === fromId)
+        : edge.fromId === fromId && edge.toId === toId
+    ))
+    if (existing) {
+      setSelectedId(existing.fromId)
+      setSelectedEdgeId(existing.id)
+      return false
+    }
+    const edge: KnowledgeEdge = { id: createId(), fromId, toId, fromSide, label: relation, directed: relation !== '相关' }
+    onChange({ ...artifact, edges: [...artifact.edges, edge] })
+    setSelectedId(fromId)
+    setSelectedEdgeId(edge.id)
     setTargetId('')
+    return true
+  }
+
+  const addConnection = () => {
+    if (!selected || !targetId) return
+    connectNodes(selected.id, targetId)
+  }
+
+  const worldPointAt = (clientX: number, clientY: number) => {
+    const rect = canvas.svgRef.current?.getBoundingClientRect()
+    if (!rect) return { x: 0, y: 0 }
+    const x = (clientX - rect.left) * size.width / rect.width
+    const y = (clientY - rect.top) * size.height / rect.height
+    return { x: (x - canvas.camera.x) / canvas.camera.zoom, y: (y - canvas.camera.y) / canvas.camera.zoom }
+  }
+
+  const nodeAtPointer = (clientX: number, clientY: number) => document.elementFromPoint(clientX, clientY)?.closest<SVGGElement>('[data-node-id]')?.dataset.nodeId
+
+  const beginConnectionDrag = (event: PointerEvent<SVGGElement>, node: KnowledgeNode, side: KnowledgeSide) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const position = positionFor(node)
+    const start = getEdgePoint(node, position, position, rootNode.id, graphDepths.get(node.id) ?? 1, side)
+    connectionDragRef.current = { fromId: node.id, fromSide: side, start, end: start, pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY, moved: false }
+    suppressAddHandleClickRef.current = false
+    setSelectedId(node.id)
+    setSelectedEdgeId('')
+    setConnectionPreview({ fromId: node.id, fromSide: side, start, end: start })
+    const svg = canvas.svgRef.current
+    if (svg && !svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId)
+  }
+
+  const updateConnectionDrag = (event: PointerEvent<SVGSVGElement>) => {
+    const drag = connectionDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) { canvas.onPointerMove(event); return }
+    drag.moved = Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) > 7
+    const targetId = nodeAtPointer(event.clientX, event.clientY)
+    setConnectionPreview({ ...drag, end: worldPointAt(event.clientX, event.clientY), targetId: targetId && targetId !== drag.fromId ? targetId : undefined })
+  }
+
+  const finishConnectionDrag = (event: PointerEvent<SVGSVGElement>) => {
+    const drag = connectionDragRef.current
+    canvas.stopGesture(event)
+    if (!drag || drag.pointerId !== event.pointerId) return
+    connectionDragRef.current = null
+    setConnectionPreview(null)
+    suppressAddHandleClickRef.current = true
+    const moved = drag.moved || Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) > 7
+    if (!moved) {
+      addDirectionalNode(drag.fromId, drag.fromSide)
+      return
+    }
+    const target = nodeAtPointer(event.clientX, event.clientY)
+    if (target && target !== drag.fromId) connectNodes(drag.fromId, target, drag.fromSide)
+  }
+
+  const cancelConnectionDrag = (event: PointerEvent<SVGSVGElement>) => {
+    canvas.stopGesture(event)
+    if (!connectionDragRef.current || connectionDragRef.current.pointerId !== event.pointerId) return
+    connectionDragRef.current = null
+    setConnectionPreview(null)
+    suppressAddHandleClickRef.current = true
   }
 
   const updateEdge = (edgeId: string, patch: Partial<KnowledgeEdge>) => onChange({ ...artifact, edges: artifact.edges.map((edge) => edge.id === edgeId ? { ...edge, ...patch } : edge) })
@@ -269,9 +380,11 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     const half = getNodeHalfSize(node, rootNode.id, graphDepths.get(node.id) ?? 1)
     canvas.fitBounds({ minX: point.x - half.width, minY: point.y - half.height, maxX: point.x + half.width, maxY: point.y + half.height }, layoutBounds.viewport)
   }
-  const focusSearchResult = () => {
-    const match = artifact.nodes.find(matchesSearch)
-    if (match) focusNode(match)
+  const focusSearchResult = (delta = 1) => {
+    if (!searchResults.length) return
+    const nextIndex = (searchMatchIndex + delta + searchResults.length) % searchResults.length
+    setSearchMatchIndex(nextIndex)
+    focusNode(searchResults[nextIndex])
   }
   const fitSelected = () => { if (selected) focusNode(selected) }
   const arrangeGraph = () => {
@@ -357,14 +470,14 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         preserveAspectRatio="none"
         aria-label={`${artifact.title} 知识图谱画布`}
         onPointerDown={canvas.startPan}
-        onPointerMove={canvas.onPointerMove}
-        onPointerUp={canvas.stopGesture}
-        onPointerCancel={canvas.stopGesture}
+        onPointerMove={updateConnectionDrag}
+        onPointerUp={finishConnectionDrag}
+        onPointerCancel={cancelConnectionDrag}
         onWheel={canvas.onWheel}
       >
         <defs>
           <pattern id="aeback-knowledge-grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 H 0 V 28" fill="none" stroke="var(--aeback-grid)" strokeWidth="1" /></pattern>
-          <marker id="aeback-knowledge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#8993a2" /></marker>
+          <marker id="aeback-knowledge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke" /></marker>
         </defs>
         <rect className="canvas-background" width={size.width} height={size.height} fill="url(#aeback-knowledge-grid)" />
         <g transform={`translate(${canvas.camera.x} ${canvas.camera.y}) scale(${canvas.camera.zoom})`}>
@@ -374,22 +487,28 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             if (!fromNode || !toNode) return null
             const from = positionFor(fromNode)
             const to = positionFor(toNode)
-            const start = getEdgePoint(fromNode, from, to, rootNode.id, graphDepths.get(fromNode.id) ?? 1)
+            const start = getEdgePoint(fromNode, from, to, rootNode.id, graphDepths.get(fromNode.id) ?? 1, edge.fromSide)
             const end = getEdgePoint(toNode, to, from, rootNode.id, graphDepths.get(toNode.id) ?? 1)
-            const dx = end.x - start.x
-            const dy = end.y - start.y
             const midpointX = (start.x + end.x) / 2
             const midpointY = (start.y + end.y) / 2
-            const horizontal = Math.abs(dx) >= Math.abs(dy)
-            const path = connectionStyle === 'orthogonal'
-              ? horizontal ? `M ${start.x} ${start.y} L ${midpointX} ${start.y} L ${midpointX} ${end.y} L ${end.x} ${end.y}` : `M ${start.x} ${start.y} L ${start.x} ${midpointY} L ${end.x} ${midpointY} L ${end.x} ${end.y}`
-              : `M ${start.x} ${start.y} Q ${midpointX - dy * .12} ${midpointY + dx * .12} ${end.x} ${end.y}`
+            const path = getGraphPath(start, end, connectionStyle)
+            const sourceColor = fromNode.color ?? (fromNode.id === rootNode.id ? 'green' : palette[(nodeIndexById.get(fromNode.id) ?? 0) % palette.length]?.value ?? 'blue')
             const dimmed = Boolean(searchQuery.trim() && !matchesSearch(fromNode) && !matchesSearch(toNode))
-            return <g key={edge.id} className={`graph-link${edge.directed ? ' graph-link--directed' : ''}${selectedEdgeId === edge.id ? ' graph-link--selected' : ''}${dimmed ? ' graph-link--dimmed' : ''}`} role="button" tabIndex={0} aria-label={`关系：${fromNode.text} ${edge.label ?? '相关'} ${toNode.text}`} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) } if (event.key === 'Delete') removeConnection(edge.id) }}>
+            return <g key={edge.id} className={`graph-link graph-link--${sourceColor}${edge.directed ? ' graph-link--directed' : ''}${selectedEdgeId === edge.id ? ' graph-link--selected' : ''}${dimmed ? ' graph-link--dimmed' : ''}`} role="button" tabIndex={0} aria-label={`关系：${fromNode.text} ${edge.label ?? '相关'} ${toNode.text}`} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) } if (event.key === 'Delete') removeConnection(edge.id) }}>
               <path d={path} markerEnd={edge.directed ? 'url(#aeback-knowledge-arrow)' : undefined} />
               <text x={midpointX} y={midpointY - 7 - (index % 2) * 4} textAnchor="middle">{edge.label ?? '相关'}</text>
             </g>
           })}
+          {connectionPreview && (() => {
+            const source = nodeById.get(connectionPreview.fromId)
+            if (!source) return null
+            const sourceColor = source.color ?? (source.id === rootNode.id ? 'green' : palette[(nodeIndexById.get(source.id) ?? 0) % palette.length]?.value ?? 'blue')
+            const target = connectionPreview.targetId ? nodeById.get(connectionPreview.targetId) : undefined
+            const end = target
+              ? getEdgePoint(target, positionFor(target), positionFor(source), rootNode.id, graphDepths.get(target.id) ?? 1)
+              : connectionPreview.end
+            return <path className={`graph-connect-preview graph-link--${sourceColor}`} d={getGraphPath(connectionPreview.start, end, connectionStyle)} />
+          })()}
           {artifact.nodes.map((node, index) => {
             const position = positionFor(node)
             const central = node.id === rootNode.id
@@ -403,13 +522,13 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const kindFontSize = Math.max(6, 9 * half.width / 70)
             const maxLabelChars = Math.max(3, Math.floor(half.width * 1.75 / titleFontSize))
             const sidePoints: Record<KnowledgeSide, { x: number; y: number }> = { up: { x: 0, y: -half.height }, right: { x: half.width, y: 0 }, down: { x: 0, y: half.height }, left: { x: -half.width, y: 0 } }
-            return <g key={node.id} id={`knowledge-node-${node.id}`} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`编辑${kindLabels[nodeKind]}节点：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
+            return <g key={node.id} id={`knowledge-node-${node.id}`} data-node-id={node.id} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}${connectionPreview?.targetId === node.id ? ' knowledge-node--connection-target' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`编辑${kindLabels[nodeKind]}节点：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
               <title>{node.text}</title>
               <circle className="knowledge-node-halo" r={half.width + 9} />
             <circle className={`knowledge-node-shape ${central ? 'knowledge-node-shape--root' : 'knowledge-node-shape--leaf'}`} r={half.width} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               <text className="canvas-node-label knowledge-node-title" x="0" y="-2" textAnchor="middle" style={{ fontSize: titleFontSize }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>
               <text className="knowledge-node-kind" x="0" y={titleFontSize * 1.42} textAnchor="middle" style={{ fontSize: kindFontSize }}>{kindLabels[nodeKind]}</text>
-              {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={`在节点${sideLabels[side]}添加关联节点`} onPointerDown={(event) => { event.stopPropagation(); setSelectedId(node.id) }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}
+              {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={`点击在${sideLabels[side]}添加节点；拖动到其他节点建立关系`} onPointerDown={(event) => beginConnectionDrag(event, node, side)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (suppressAddHandleClickRef.current) { suppressAddHandleClickRef.current = false; return } addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><title>{`点击在${sideLabels[side]}添加节点；拖动到其他节点建立关系`}</title><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}
             </g>
           })}
         </g>
@@ -436,7 +555,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
       <div className="canvas-tool-rail graph-tool-rail" role="toolbar" aria-label="知识图谱工具">
         <div className="graph-tool-group" role="group" aria-label="节点操作">
           <button className="canvas-tool-primary" type="button" aria-label="添加关联节点" title="添加关联节点" onClick={addNode}><Icon name="plus" size={18} /></button>
-          <div className="canvas-search-control"><button className={`direction-button${searchOpen ? ' direction-button--active' : ''}`} type="button" aria-label="搜索节点" aria-expanded={searchOpen} title="搜索节点" onClick={() => { setSearchOpen((open) => !open); setSearchQuery('') }}><Icon name="search" size={16} /></button>{searchOpen && <input className="graph-search-input" autoFocus aria-label="搜索知识节点" placeholder="搜索节点" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') focusSearchResult(); if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery('') } }} />}</div>
+          <div className="canvas-search-control"><button className={`direction-button${searchOpen ? ' direction-button--active' : ''}`} type="button" aria-label="搜索节点" aria-expanded={searchOpen} title="搜索节点" onClick={() => { setSearchOpen((open) => !open); setSearchQuery(''); setSearchMatchIndex(-1) }}><Icon name="search" size={16} /></button>{searchOpen && <div className="graph-search-panel"><input className="graph-search-input" autoFocus aria-label="搜索知识节点" placeholder="搜索节点" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setSearchMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); focusSearchResult(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); setSearchMatchIndex(-1) } }} /><div><button type="button" aria-label="上一个搜索结果" disabled={!searchResults.length} onClick={() => focusSearchResult(-1)}>↑</button><span>{searchResults.length ? `${searchMatchIndex < 0 ? 0 : searchMatchIndex + 1} / ${searchResults.length}` : '0 个结果'}</span><button type="button" aria-label="下一个搜索结果" disabled={!searchResults.length} onClick={() => focusSearchResult(1)}>↓</button></div></div>}</div>
           {selected?.id !== rootNode.id && <button className="direction-button graph-tool-danger" type="button" aria-label="删除选中节点" title="删除选中节点" onClick={deleteNode}><Icon name="trash" size={16} /></button>}
         </div>
         <div className="canvas-tool-separator" />
@@ -464,7 +583,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
         {artifact.sourceText && <button className="canvas-source-toggle" type="button" aria-expanded={showSource} onClick={() => setShowSource((value) => !value)}>{showSource ? '收起原文' : '查看原文'}</button>}
       </aside>}
       {showSource && artifact.sourceText && <section className="canvas-source-panel"><header><span>导入原文</span><button type="button" aria-label="关闭原文" onClick={() => setShowSource(false)}><Icon name="close" size={15} /></button></header><p>{artifact.sourceText}</p></section>}
-      <div className="canvas-help">拖动节点 · 空白处平移 · 滚轮缩放</div>
+      <div className="canvas-help">拖动节点 · 拖动加号连接 · 空白处平移 · 滚轮缩放</div>
       {importOpen && <ArticleImportDialog onClose={() => setImportOpen(false)} onImport={(title, text) => { setImportOpen(false); onImportArticle(title, text) }} />}
     </div>
   )

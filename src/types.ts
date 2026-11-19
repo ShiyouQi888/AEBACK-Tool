@@ -43,6 +43,7 @@ export type KnowledgeEdge = {
   id: string
   fromId: string
   toId: string
+  fromSide?: 'up' | 'right' | 'down' | 'left'
   label?: string
   directed?: boolean
 }

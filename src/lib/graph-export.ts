@@ -65,6 +65,7 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
   const toX = (x: number) => x - bounds.minX + padding
   const toY = (y: number) => y - bounds.minY + padding
   const nodeById = new Map(artifact.nodes.map((node) => [node.id, node] as const))
+  const nodeIndexById = new Map(artifact.nodes.map((node, index) => [node.id, index] as const))
   const edges = artifact.edges.map((edge, index) => {
     const fromNode = nodeById.get(edge.fromId)
     const toNode = nodeById.get(edge.toId)
@@ -76,7 +77,13 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
     const length = Math.max(1, Math.hypot(dx, dy))
     const fromRadius = halfSize(fromNode, root.id, depths)
     const toRadius = halfSize(toNode, root.id, depths)
-    const start = { x: from.x + dx / length * fromRadius, y: from.y + dy / length * fromRadius }
+    const sideVector = edge.fromSide === 'up' ? { x: 0, y: -1 }
+      : edge.fromSide === 'right' ? { x: 1, y: 0 }
+        : edge.fromSide === 'down' ? { x: 0, y: 1 }
+          : edge.fromSide === 'left' ? { x: -1, y: 0 } : undefined
+    const start = sideVector
+      ? { x: from.x + sideVector.x * fromRadius, y: from.y + sideVector.y * fromRadius }
+      : { x: from.x + dx / length * fromRadius, y: from.y + dy / length * fromRadius }
     const end = { x: to.x - dx / length * toRadius, y: to.y - dy / length * toRadius }
     const edgeDx = end.x - start.x
     const edgeDy = end.y - start.y
@@ -88,7 +95,8 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
       : `M ${toX(start.x)} ${toY(start.y)} Q ${toX(midpointX - edgeDy * .12)} ${toY(midpointY + edgeDx * .12)} ${toX(end.x)} ${toY(end.y)}`
     const label = escapeXml(edge.label ?? '相关')
     const labelY = toY(midpointY - 7 - (index % 2) * 4)
-    return `<g><path d="${path}" fill="none" stroke="#cbd2da" stroke-width="1.6"${edge.directed ? ' marker-end="url(#aeback-graph-arrow)"' : ''}/><text x="${toX(midpointX)}" y="${labelY}" text-anchor="middle" fill="#68717e" stroke="#ffffff" stroke-width="4" paint-order="stroke" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10">${label}</text></g>`
+    const edgeColor = colors[colorFor(fromNode, root.id, nodeIndexById.get(fromNode.id) ?? 0)].stroke
+    return `<g><path d="${path}" fill="none" stroke="${edgeColor}" stroke-opacity=".72" stroke-width="1.8"${edge.directed ? ' marker-end="url(#aeback-graph-arrow)"' : ''}/><text x="${toX(midpointX)}" y="${labelY}" text-anchor="middle" fill="#68717e" stroke="#ffffff" stroke-width="4" paint-order="stroke" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10">${label}</text></g>`
   }).join('\n')
   const nodes = artifact.nodes.map((node, index) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0 }
@@ -101,7 +109,7 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
     const description = node.description ? `<desc>${escapeXml(node.description)}</desc>` : ''
     return `<g><title>${escapeXml(node.text)}</title>${description}<circle cx="${toX(point.x)}" cy="${toY(point.y)}" r="${radius}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="${node.id === root.id ? 2.2 : 1.4}"/><text x="${toX(point.x)}" y="${toY(point.y) - 2}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${titleFontSize}" font-weight="${node.id === root.id ? 650 : 620}">${escapeXml(nodeLabel(node.text, radius, titleFontSize))}</text><text x="${toX(point.x)}" y="${toY(point.y) + titleFontSize * 1.42}" text-anchor="middle" fill="#424957" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${kindFontSize}" font-weight="570">${kind}</text></g>`
   }).join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- AEBACK knowledge graph export -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description"><title id="title">${escapeXml(artifact.title)} · AEBACK</title><desc id="description">AEBACK knowledge graph with ${artifact.nodes.length} nodes and ${artifact.edges.length} relationships.</desc><defs><marker id="aeback-graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#8993a2"/></marker></defs><rect width="100%" height="100%" fill="#ffffff"/><g>${edges}\n${nodes}</g><text x="${width - padding}" y="${height - 18}" text-anchor="end" fill="#9aa1ac" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10" letter-spacing="1.5">AEBACK</text></svg>`
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- AEBACK knowledge graph export -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description"><title id="title">${escapeXml(artifact.title)} · AEBACK</title><desc id="description">AEBACK knowledge graph with ${artifact.nodes.length} nodes and ${artifact.edges.length} relationships.</desc><defs><marker id="aeback-graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs><rect width="100%" height="100%" fill="#ffffff"/><g>${edges}\n${nodes}</g><text x="${width - padding}" y="${height - 18}" text-anchor="end" fill="#9aa1ac" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10" letter-spacing="1.5">AEBACK</text></svg>`
 }
 
 export function createGraphProject(artifact: GraphArtifact) {
@@ -159,6 +167,7 @@ export function parseGraphProject(value: unknown): GraphArtifact {
     const edge = entry as Record<string, unknown>
     if (typeof edge.id !== 'string' || !edge.id || edge.id.length > 200 || edgeIds.has(edge.id) || typeof edge.fromId !== 'string' || typeof edge.toId !== 'string' || !ids.has(edge.fromId) || !ids.has(edge.toId)) throw new Error('工程内包含无效或重复的关系。')
     if ((edge.label !== undefined && (typeof edge.label !== 'string' || edge.label.length > 500)) || (edge.directed !== undefined && typeof edge.directed !== 'boolean')) throw new Error('工程内包含无效的关系属性。')
+    if (edge.fromSide !== undefined && !['up', 'right', 'down', 'left'].includes(String(edge.fromSide))) throw new Error('工程内包含无效的关系连接方向。')
     edgeIds.add(edge.id)
     edges.push(edge as unknown as KnowledgeEdge)
   }

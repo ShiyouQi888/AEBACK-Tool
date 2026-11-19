@@ -597,10 +597,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .knowledge-node:focus-visible .knowledge-node-shape { stroke: var(--aeback-focus); stroke-width: 2.6; }
 .knowledge-node--dimmed { opacity: .16; }
 .knowledge-node--match .knowledge-node-shape { stroke-width: 2.1; }
-.graph-link path { fill: none; stroke: #cbd2da; stroke-width: 1.6; pointer-events: stroke; cursor: pointer; transition: stroke 120ms ease, stroke-width 120ms ease, opacity 120ms ease; }
+.graph-link path { fill: none; stroke: #cbd2da; stroke-width: 1.8; pointer-events: stroke; cursor: pointer; transition: stroke 120ms ease, stroke-width 120ms ease, opacity 120ms ease; }
+.graph-link--blue path, .graph-connect-preview.graph-link--blue { stroke: #7589eb; }
+.graph-link--violet path, .graph-connect-preview.graph-link--violet { stroke: #a879da; }
+.graph-link--green path, .graph-connect-preview.graph-link--green { stroke: #68b88c; }
+.graph-link--amber path, .graph-connect-preview.graph-link--amber { stroke: #d6a84d; }
+.graph-link--coral path, .graph-connect-preview.graph-link--coral { stroke: #d87e72; }
+.graph-link--slate path, .graph-connect-preview.graph-link--slate { stroke: #8996aa; }
 .graph-link text { fill: #77808d; stroke: var(--aeback-canvas); stroke-width: 4px; paint-order: stroke; font-family: inherit; font-size: 10px; pointer-events: none; }
 .graph-link--selected path, .graph-link:focus-visible path { stroke: var(--aeback-accent); stroke-width: 2.4; }
 .graph-link--dimmed { opacity: .15; }
+.graph-connect-preview { fill: none; stroke-width: 2.4; stroke-dasharray: 6 4; stroke-linecap: round; opacity: .9; pointer-events: none; }
+.knowledge-node--connection-target .knowledge-node-shape { stroke: var(--aeback-brand); stroke-width: 3; filter: drop-shadow(0 0 7px rgba(136, 57, 242, .3)); }
 .knowledge-add-handle { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 100ms ease; }
 .knowledge-node:hover .knowledge-add-handle, .knowledge-node.canvas-node--selected .knowledge-add-handle, .knowledge-add-handle:focus-visible { opacity: 1; pointer-events: auto; }
 .knowledge-add-handle circle { fill: var(--aeback-surface); stroke: var(--aeback-focus); stroke-width: 1.2; filter: drop-shadow(0 2px 3px var(--aeback-shadow-medium)); }
@@ -609,7 +617,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .knowledge-add-handle:hover path, .knowledge-add-handle:focus-visible path { stroke: var(--aeback-surface); }
 .graph-line-style-controls { display: grid; grid-template-columns: 34px; gap: 3px; padding: 3px; border-radius: 8px; background: var(--aeback-canvas); }
 .canvas-search-control { position: relative; z-index: 5; width: 33px; height: 33px; }
-.graph-search-input { position: absolute; top: 0; left: 42px; width: 188px; height: 33px; padding: 0 10px; color: var(--aeback-ink); border: 1px solid var(--aeback-line); border-radius: 7px; outline: 0; background: var(--aeback-surface); box-shadow: 0 4px 12px var(--aeback-shadow-medium); font: inherit; font-size: 11px; }
+.graph-search-panel { position: absolute; top: 0; left: 42px; width: min(232px, calc(100vw - 120px)); padding: 7px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-surface); box-shadow: 0 4px 12px var(--aeback-shadow-medium); }
+.graph-search-input { width: 100%; height: 32px; padding: 0 9px; color: var(--aeback-ink); border: 1px solid var(--aeback-line); border-radius: 6px; outline: 0; background: var(--aeback-canvas); font: inherit; font-size: 11px; }
+.graph-search-panel > div { display: flex; align-items: center; justify-content: space-between; gap: 5px; padding-top: 5px; }
+.graph-search-panel > div span { flex: 1; color: var(--aeback-subtle); font-size: 10px; text-align: center; }
+.graph-search-panel > div button { width: 24px; height: 23px; color: var(--aeback-subtle); border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.graph-search-panel > div button:hover { color: var(--aeback-ink); background: var(--aeback-canvas); }
+.graph-search-panel > div button:disabled { opacity: .35; cursor: default; }
 .graph-search-input:focus { border-color: var(--aeback-focus); }
 .canvas-workspace .modal-scrim { z-index: 100; }
 
