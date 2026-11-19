@@ -30,7 +30,10 @@ function WebsiteShell({ currentPath, onNavigate, children }: WebsiteShellProps) 
     <header className="site-header">
       <SiteLink className="site-brand" to="/" onNavigate={onNavigate} aria-label="AEBACK"><BrandLogo /></SiteLink>
       <nav className="site-nav" aria-label={t('官网导航')}>
-        <SiteLink to="/tools" onNavigate={onNavigate} aria-current={currentPath.startsWith('/tools') ? 'page' : undefined}>{t('产品工具')}</SiteLink>
+        <SiteLink to="/tools/mind-map" onNavigate={onNavigate} aria-current={currentPath === '/tools/mind-map' ? 'page' : undefined}>{t('思维导图')}</SiteLink>
+        <SiteLink to="/tools/knowledge-graph" onNavigate={onNavigate} aria-current={currentPath === '/tools/knowledge-graph' ? 'page' : undefined}>{t('知识图谱')}</SiteLink>
+        <SiteLink to="/tools/smart-documents" onNavigate={onNavigate} aria-current={currentPath === '/tools/smart-documents' ? 'page' : undefined}>{t('智能文档')}</SiteLink>
+        <SiteLink to="/tools/smart-tables" onNavigate={onNavigate} aria-current={currentPath === '/tools/smart-tables' ? 'page' : undefined}>{t('智能表格')}</SiteLink>
         <SiteLink to="/free" onNavigate={onNavigate} aria-current={currentPath === '/free' ? 'page' : undefined}>{t('免费使用')}</SiteLink>
         <SiteLink to="/about" onNavigate={onNavigate} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('关于 AEBACK')}</SiteLink>
       </nav>
