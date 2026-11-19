@@ -1,50 +1,30 @@
 // Aeback official landing page — a direct introduction to the local personal tools workspace.
 import BrandLogo from './BrandLogo'
 import Icon, { type IconName } from './Icon'
-import LanguageSwitcher from './LanguageSwitcher'
 import { useI18n } from '../lib/i18n'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import WebsiteShell, { SiteLink, type SiteNavigate } from './WebsiteShell'
 
-type LandingPageProps = { onEnterWorkspace: () => void }
+type LandingPageProps = { onNavigate: SiteNavigate }
 
-const tools: Array<{ id: string; icon: IconName; title: string; description: string }> = [
-  { id: 'mindmap', icon: 'mindmap', title: '思维导图', description: '拆解主题，拖动节点，调整方向与色彩。' },
-  { id: 'graph', icon: 'network', title: '知识图谱', description: '从文章提取节点与关系，整理知识脉络。' },
-  { id: 'document', icon: 'document', title: '智能文档', description: '用 Markdown、代码块与提示块组织内容。' },
-  { id: 'table', icon: 'table', title: '智能表格', description: '管理资料、公式、筛选与单元格格式。' },
+const tools: Array<{ id: string; slug: string; icon: IconName; title: string; description: string }> = [
+  { id: 'mindmap', slug: 'mind-map', icon: 'mindmap', title: '思维导图', description: '拆解主题，拖动节点，调整方向与色彩。' },
+  { id: 'graph', slug: 'knowledge-graph', icon: 'network', title: '知识图谱', description: '从文章提取节点与关系，整理知识脉络。' },
+  { id: 'document', slug: 'smart-documents', icon: 'document', title: '智能文档', description: '用 Markdown、代码块与提示块组织内容。' },
+  { id: 'table', slug: 'smart-tables', icon: 'table', title: '智能表格', description: '管理资料、公式、筛选与单元格格式。' },
 ]
 
-function LandingPage({ onEnterWorkspace }: LandingPageProps) {
+function LandingPage({ onNavigate }: LandingPageProps) {
   const { t } = useI18n()
-  const year = new Date().getFullYear()
-  const enterWorkspace = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    onEnterWorkspace()
-  }
 
-  return <main className="marketing-site" id="top">
-    <header className="site-header">
-      <a className="site-brand" href="#top" aria-label="AEBACK">
-        <BrandLogo />
-      </a>
-      <nav className="site-nav" aria-label={t('官网导航')}>
-        <a href="#tools">{t('产品工具')}</a>
-        <a href="#local">{t('本地优先')}</a>
-      </nav>
-      <div className="site-header-actions">
-        <LanguageSwitcher />
-        <a className="site-button site-button--primary site-header-cta" href="/workspace" onClick={enterWorkspace}>{t('进入工作台')}</a>
-      </div>
-    </header>
-
+  return <WebsiteShell currentPath="/" onNavigate={onNavigate}>
+    <main className="site-home" id="top">
     <section className="site-hero site-container">
       <div className="site-hero-copy">
-        <p className="site-eyebrow"><span />AEBACK · PERSONAL WORKSPACE</p>
-        <h1>{t('让想法彼此连接，')}<span>{t('让知识继续生长。')}</span></h1>
-        <p className="site-hero-description">{t('思维导图、知识图谱、智能文档与智能表格，围绕你的内容展开。')}</p>
+        <p className="site-eyebrow"><span />AEBACK · PERSONAL WORKSPACE <b className="site-free-pill">{t('免费使用')}</b></p>
+        <h1>{t('四种个人工具')}<span>{t('全部免费使用')}</span></h1>
+        <p className="site-hero-description">{t('思维导图、知识图谱、智能文档与智能表格，打开即用，数据保存在本地。')}</p>
         <div className="site-hero-actions">
-          <a className="site-button site-button--primary" href="/workspace" onClick={enterWorkspace}>{t('进入工作台')}</a>
+          <SiteLink className="site-button site-button--primary" to="/workspace" onNavigate={onNavigate}>{t('免费进入工作台')}</SiteLink>
           <a className="site-button site-button--quiet" href="#tools">{t('了解工具')}</a>
         </div>
         <p className="site-hero-note"><span aria-hidden="true">✓</span>{t('工作区保存在当前浏览器')}</p>
@@ -107,6 +87,7 @@ function LandingPage({ onEnterWorkspace }: LandingPageProps) {
             {tool.id === 'document' && <div className="demo-document"><b>{t('AEBACK 产品手册')}</b><i /><i /><i /><strong /><i /><i /></div>}
             {tool.id === 'table' && <div className="demo-table"><div><b>{t('项目')}</b><b>{t('进度')}</b><b>{t('评分')}</b></div><div><span>{t('阅读计划')}</span><span className="demo-cell demo-cell--green">{t('进行中')}</span><span>4</span></div><div><span>{t('产品设计')}</span><span className="demo-cell demo-cell--orange">{t('待整理')}</span><span>5</span></div></div>}
           </div>
+          <SiteLink className="site-tool-link" to={`/tools/${tool.slug}`} onNavigate={onNavigate}>{t('查看工具介绍')}</SiteLink>
         </article>)}
       </div>
     </section>
@@ -116,7 +97,7 @@ function LandingPage({ onEnterWorkspace }: LandingPageProps) {
         <p className="site-eyebrow">{t('从原文走向关系')}</p>
         <h2>{t('文章不只被收藏，也能成为知识图谱。')}</h2>
         <p>{t('导入文章后，AEBACK 会识别标题与段落要点，生成可继续编辑的节点关系。')}</p>
-        <a className="site-inline-link" href="/workspace" onClick={enterWorkspace}>{t('试着导入一篇文章')}</a>
+        <SiteLink className="site-inline-link" to="/tools/knowledge-graph" onNavigate={onNavigate}>{t('查看知识图谱介绍')}</SiteLink>
       </div>
       <div className="site-knowledge-visual" aria-hidden="true">
         <div className="site-source-card"><span><Icon name="document" size={14} /></span><b>{t('一篇文章')}</b><i /><i /><i /></div>
@@ -132,14 +113,10 @@ function LandingPage({ onEnterWorkspace }: LandingPageProps) {
         <h2>{t('本地保存，随时带走。')}</h2>
         <p>{t('工作区保存在当前浏览器。可导出 AEBACK JSON 备份，内容不会发送到外部服务。')}</p>
       </div>
-      <a className="site-button site-button--primary" href="/workspace" onClick={enterWorkspace}>{t('进入工作台')}</a>
+      <SiteLink className="site-button site-button--primary" to="/free" onNavigate={onNavigate}>{t('了解免费方案')}</SiteLink>
     </section>
-
-    <footer className="site-footer site-container">
-      <a className="site-footer-brand" href="#top"><BrandLogo /><span>AEBACK</span></a>
-      <span>{t('© {year} AEBACK. 保留所有权利。', { year })}</span>
-    </footer>
-  </main>
+    </main>
+  </WebsiteShell>
 }
 
 export default LandingPage

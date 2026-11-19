@@ -57,7 +57,7 @@ function ArtifactRow({ artifact, onOpen }: { artifact: WorkspaceArtifact; onOpen
   </button>
 }
 
-function App() {
+function App({ initialView = 'library' }: { initialView?: WorkspaceView }) {
   const { t } = useI18n()
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
@@ -71,7 +71,7 @@ function App() {
   const [isSaving, setIsSaving] = useState(false)
   const artifactsRef = useRef(artifacts)
   artifactsRef.current = artifacts
-  const [view, setView] = useState<WorkspaceView>('library')
+  const [view, setView] = useState<WorkspaceView>(initialView)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {

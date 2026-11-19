@@ -3,6 +3,18 @@
 
 Aeback 是个人知识工具工作台，提供思维导图、知识图谱、智能文档和智能表格。根路径 `/` 是 AEBACK 官网，点击「进入工作台」或访问 `/workspace` 打开工具工作区。
 
+## 官网结构
+
+- `/`：官网首页，展示四种工具、本地保存方式，并提供工作台入口。
+- `/tools`：工具总览页。
+- `/tools/mind-map`、`/tools/knowledge-graph`、`/tools/smart-documents`、`/tools/smart-tables`：各工具的独立介绍页，可直接进入对应工作区。
+- `/free`：免费使用说明。
+- `/about`：产品介绍。
+- `/privacy`：浏览器本地数据与隐私说明。
+- `/workspace`：个人工作台；`?tool=mindmap|graph|document|table` 可从官网直接打开对应工具。
+
+官网及工具界面提供简体中文和英文文案，页面共用 AEBACK 品牌导航与页脚。
+
 ## 启动
 
 需要 Node.js 20.19+ 或 22.12+。
