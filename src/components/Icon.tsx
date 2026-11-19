@@ -1,7 +1,7 @@
 // Aeback icon set for a compact, consistent personal tools workspace.
 import type { ReactNode } from 'react'
 
-export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'menu' | 'alignLeft' | 'alignCenter' | 'alignRight' | 'wrap' | 'border' | 'branch' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo' | 'sun' | 'moon'
+export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'menu' | 'alignLeft' | 'alignCenter' | 'alignRight' | 'wrap' | 'border' | 'branch' | 'link' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo' | 'sun' | 'moon'
 
 const icons: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.4" /><rect x="14" y="3" width="7" height="7" rx="1.4" /><rect x="3" y="14" width="7" height="7" rx="1.4" /><rect x="14" y="14" width="7" height="7" rx="1.4" /></>,
@@ -27,6 +27,7 @@ const icons: Record<IconName, ReactNode> = {
   wrap: <><path d="M4 5h16M4 10h11a3 3 0 0 1 0 6h-2m0 0 2-2m-2 2 2 2M4 21h16" /></>,
   border: <><rect x="4" y="4" width="16" height="16" rx="1.5" /><path d="M12 4v16M4 12h16" /></>,
   branch: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v5a7 7 0 0 0 7 7h3m0 0-3-3m3 3-3 3" /></>,
+  link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
   curve: <path d="M4 18h4a5 5 0 0 0 5-5V9a4 4 0 0 1 4-4h3" />,
   elbow: <path d="M4 18h8V6h8" />,
   arrange: <><rect x="3.5" y="3.5" width="7" height="6" rx="1.2" /><rect x="13.5" y="14.5" width="7" height="6" rx="1.2" /><path d="M7 10v4a3.5 3.5 0 0 0 3.5 3.5h3" /></>,

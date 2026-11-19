@@ -17,6 +17,12 @@ export type MindMapNode = {
   collapsed?: boolean
 }
 
+export type MindMapCrossLink = {
+  id: string
+  fromId: string
+  toId: string
+}
+
 export type KnowledgeNode = {
   id: string
   text: string
@@ -48,6 +54,7 @@ type ArtifactBase = {
 export type MindMapArtifact = ArtifactBase & {
   type: 'mindmap'
   nodes: MindMapNode[]
+  crossLinks?: MindMapCrossLink[]
   direction?: MindMapDirection
   connectionStyle?: MindMapLineStyle
 }

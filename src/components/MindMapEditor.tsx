@@ -7,7 +7,7 @@ import { useCanvasController, useViewportSize } from '../lib/useCanvasController
 import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, getMindMapNodeSize, parseMindMapProject } from '../lib/mindmap-export'
 import { downloadCanvasRaster } from '../lib/canvas-export'
 import { downloadText, readTextFile } from '../lib/files'
-import type { MindMapArtifact, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
+import type { MindMapArtifact, MindMapCrossLink, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
 
 type MindMapEditorProps = {
   artifact: MindMapArtifact
@@ -44,6 +44,29 @@ function getMindMapConnectionAnchor(center: { x: number; y: number }, width: num
   if (side === 'right') return { x: center.x + width / 2, y: center.y }
   if (side === 'down') return { x: center.x, y: center.y + height / 2 }
   return { x: center.x - width / 2, y: center.y }
+}
+
+function getConnectionPath(from: { x: number; y: number; depth: number }, to: { x: number; y: number; depth: number }, style: MindMapLineStyle) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
+  const sourceSide: MindMapSide = horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up')
+  const targetSide: MindMapSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
+  const fromSize = getMindMapNodeSize(from.depth)
+  const toSize = getMindMapNodeSize(to.depth)
+  const start = getMindMapConnectionAnchor(from, fromSize.width, fromSize.height, sourceSide)
+  const end = getMindMapConnectionAnchor(to, toSize.width, toSize.height, targetSide)
+  const midpointX = (start.x + end.x) / 2
+  const midpointY = (start.y + end.y) / 2
+  const edgeDx = end.x - start.x
+  const edgeDy = end.y - start.y
+  return style === 'orthogonal'
+    ? horizontal
+      ? `M ${start.x} ${start.y} L ${midpointX} ${start.y} L ${midpointX} ${end.y} L ${end.x} ${end.y}`
+      : `M ${start.x} ${start.y} L ${start.x} ${midpointY} L ${end.x} ${midpointY} L ${end.x} ${end.y}`
+    : horizontal
+      ? `M ${start.x} ${start.y} C ${start.x + edgeDx * 0.42} ${start.y} ${end.x - edgeDx * 0.42} ${end.y} ${end.x} ${end.y}`
+      : `M ${start.x} ${start.y} C ${start.x} ${start.y + edgeDy * 0.42} ${end.x} ${end.y - edgeDy * 0.42} ${end.x} ${end.y}`
 }
 
 function createId() {
@@ -200,6 +223,10 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   }, [size.height, size.width])
   const root = artifact.nodes.find((node) => node.parentId === null) ?? artifact.nodes[0]
   const [selectedId, setSelectedId] = useState(root?.id ?? '')
+  const [connectionMode, setConnectionMode] = useState(false)
+  const [connectingFromId, setConnectingFromId] = useState<string | null>(null)
+  const [selectedCrossLinkId, setSelectedCrossLinkId] = useState<string | null>(null)
+  const [connectionNotice, setConnectionNotice] = useState('')
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
@@ -211,6 +238,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   const selected = artifact.nodes.find((node) => node.id === selectedId) ?? root
   const direction = artifact.direction ?? 'radial'
   const connectionStyle = artifact.connectionStyle ?? 'curve'
+  const selectedCrossLink = artifact.crossLinks?.find((link) => link.id === selectedCrossLinkId)
   const visibleNodes = useMemo(() => root ? getVisibleNodes(artifact.nodes, root.id) : [], [artifact.nodes, root?.id])
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes])
   const [historyStatus, setHistoryStatus] = useState({ canUndo: false, canRedo: false })
@@ -330,6 +358,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     const nextNodes = [...artifact.nodes.map((existing) => existing.id === parentId ? { ...existing, collapsed: false } : existing), node]
     commitChange({ ...artifact, nodes: nextNodes })
     setSelectedId(node.id)
+    setSelectedCrossLinkId(null)
     setInspectorOpen(false)
     const fullCanvas = { left: 88, right: size.width - 24, top: 76, bottom: size.height - 72 }
     if (x - halfWidth < fullCanvas.left || x + halfWidth > fullCanvas.right || y - halfHeight < fullCanvas.top || y + halfHeight > fullCanvas.bottom) {
@@ -353,6 +382,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     if (!node) return
     commitChange({ ...artifact, nodes: artifact.nodes.map((item) => item.id === nodeId ? { ...item, collapsed: !item.collapsed } : item) })
     setSelectedId(nodeId)
+    setSelectedCrossLinkId(null)
     setInspectorOpen(true)
   }
 
@@ -381,8 +411,10 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       }
     })
     const nextNodes = [...artifact.nodes, ...clones]
-    commitChange({ ...artifact, nodes: nextNodes })
+    const clonedCrossLinks = (artifact.crossLinks ?? []).filter((link) => ids.has(link.fromId) && ids.has(link.toId)).map((link) => ({ id: createId(), fromId: ids.get(link.fromId)!, toId: ids.get(link.toId)! }))
+    commitChange({ ...artifact, nodes: nextNodes, crossLinks: [...(artifact.crossLinks ?? []), ...clonedCrossLinks] })
     setSelectedId(ids.get(source.id)!)
+    setSelectedCrossLinkId(null)
     setInspectorOpen(true)
     fitLayout(nextNodes, new Map(nextNodes.map((node) => [node.id, positionFor(node)] as const)))
   }
@@ -391,11 +423,78 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
 
   const beginInlineEdit = (node: MindMapNode) => {
     setSelectedId(node.id)
+    setSelectedCrossLinkId(null)
     setEditingText(node.text)
     setEditingId(node.id)
   }
 
+  const cancelConnectionMode = () => {
+    setConnectionMode(false)
+    setConnectingFromId(null)
+    setConnectionNotice('')
+  }
+
+  const chooseConnectionNode = (nodeId: string) => {
+    if (!connectingFromId) {
+      setConnectingFromId(nodeId)
+      setSelectedId(nodeId)
+      setSelectedCrossLinkId(null)
+      setConnectionNotice('')
+      setInspectorOpen(true)
+      return
+    }
+    if (connectingFromId === nodeId) { setConnectingFromId(null); setConnectionNotice(''); return }
+    const source = artifact.nodes.find((node) => node.id === connectingFromId)
+    const target = artifact.nodes.find((node) => node.id === nodeId)
+    if (!source || !target) { setConnectingFromId(null); return }
+    if (source.parentId === target.id || target.parentId === source.id) {
+      setConnectionNotice('这两个节点已经有分支连线')
+      return
+    }
+    const existing = (artifact.crossLinks ?? []).find((link) => (link.fromId === source.id && link.toId === target.id) || (link.fromId === target.id && link.toId === source.id))
+    if (existing) {
+      setSelectedCrossLinkId(existing.id)
+      setSelectedId(source.id)
+      setConnectingFromId(null)
+      setConnectionNotice('这两个节点已经连接')
+      setInspectorOpen(true)
+      return
+    }
+    const crossLink: MindMapCrossLink = { id: createId(), fromId: source.id, toId: target.id }
+    commitChange({ ...artifact, crossLinks: [...(artifact.crossLinks ?? []), crossLink] })
+    setSelectedId(target.id)
+    setSelectedCrossLinkId(crossLink.id)
+    setConnectingFromId(null)
+    setConnectionNotice('')
+    setInspectorOpen(true)
+  }
+
+  const selectCrossLink = (crossLink: MindMapCrossLink) => {
+    setSelectedCrossLinkId(crossLink.id)
+    setSelectedId(crossLink.fromId)
+    setConnectionMode(false)
+    setConnectingFromId(null)
+    setConnectionNotice('')
+    setInspectorOpen(true)
+  }
+
+  const removeCrossLink = (crossLinkId: string) => {
+    const crossLinks = (artifact.crossLinks ?? []).filter((link) => link.id !== crossLinkId)
+    commitChange({ ...artifact, crossLinks: crossLinks.length ? crossLinks : undefined })
+    if (selectedCrossLinkId === crossLinkId) setSelectedCrossLinkId(null)
+    setConnectionMode(false)
+    setConnectingFromId(null)
+  }
+
   const handleNodePointerDown = (event: PointerEvent<SVGGElement>, node: MindMapNode, position: { x: number; y: number }) => {
+    if (connectionMode) {
+      event.preventDefault()
+      event.stopPropagation()
+      lastNodeTapRef.current = null
+      chooseConnectionNode(node.id)
+      return
+    }
+    setSelectedCrossLinkId(null)
     const now = Date.now()
     const previousTap = lastNodeTapRef.current
     if (previousTap?.id === node.id && now - previousTap.time < 360) {
@@ -430,7 +529,10 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       }
     }
     const nextNodes = artifact.nodes.filter((node) => !removed.has(node.id))
-    commitChange({ ...artifact, nodes: nextNodes })
+    const crossLinks = (artifact.crossLinks ?? []).filter((link) => !removed.has(link.fromId) && !removed.has(link.toId))
+    commitChange({ ...artifact, nodes: nextNodes, crossLinks: crossLinks.length ? crossLinks : undefined })
+    if (selectedCrossLink && (removed.has(selectedCrossLink.fromId) || removed.has(selectedCrossLink.toId))) setSelectedCrossLinkId(null)
+    if (connectingFromId && removed.has(connectingFromId)) setConnectingFromId(null)
     setSelectedId(artifact.nodes.find((node) => node.id === nodeId)?.parentId ?? root.id)
     const positions = new Map(nextNodes.map((node) => [node.id, positionFor(node)] as const))
     fitLayout(nextNodes, positions)
@@ -466,13 +568,16 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     collectDescendants(selected.id)
     if (parentId === selected.id || descendants.has(parentId)) return
     const nextNodes = artifact.nodes.map((node) => node.id === selected.id ? { ...node, parentId, x: undefined, y: undefined } : node.id === parentId ? { ...node, collapsed: false } : node)
+    const crossLinks = (artifact.crossLinks ?? []).filter((link) => !((link.fromId === selected.id && link.toId === parentId) || (link.fromId === parentId && link.toId === selected.id)))
+    if (selectedCrossLink && !crossLinks.some((link) => link.id === selectedCrossLink.id)) setSelectedCrossLinkId(null)
     const nextLayout = getLayout(nextNodes, direction, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
-    commitChange({ ...artifact, nodes: nextNodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}) })) })
+    commitChange({ ...artifact, nodes: nextNodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}) })), crossLinks: crossLinks.length ? crossLinks : undefined })
     fitLayout(nextNodes, nextLayout)
   }
 
   const focusNode = (nodeId: string) => {
     setSelectedId(nodeId)
+    setSelectedCrossLinkId(null)
     setInspectorOpen(true)
     requestAnimationFrame(() => document.getElementById(`mindmap-node-${nodeId}`)?.focus())
   }
@@ -494,6 +599,11 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       duplicateNodeById(node.id)
       return
     }
+    if (connectionMode) {
+      if (event.key === 'Escape') { event.preventDefault(); cancelConnectionMode() }
+      else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseConnectionNode(node.id) }
+      return
+    }
     if (event.key === 'Tab') {
       event.preventDefault()
       addDirectionalNode(node.id, sideForDirection())
@@ -507,6 +617,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     if (event.key === ' ') {
       event.preventDefault()
       setSelectedId(node.id)
+      setSelectedCrossLinkId(null)
       setInspectorOpen(true)
       return
     }
@@ -578,6 +689,8 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       if (!window.confirm(`导入「${project.title}」并替换当前思维导图？当前版本可用撤销恢复。`)) return
       commitChange({ ...project, id: artifact.id, updatedAt: new Date().toISOString() })
       setSelectedId(project.nodes.find((node) => node.parentId === null)?.id ?? '')
+      setSelectedCrossLinkId(null)
+      cancelConnectionMode()
       setInspectorOpen(true)
       canvas.resetCamera()
       setExportNotice('工程已导入')
@@ -610,27 +723,19 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const fromNode = artifact.nodes.find((item) => item.id === node.parentId)!
             const from = positionFor(fromNode)
             const to = positionFor(node)
-            const dx = to.x - from.x
-            const dy = to.y - from.y
-            const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
-            const sourceSide: MindMapSide = horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up')
-            const targetSide: MindMapSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
-            const fromSize = getMindMapNodeSize(from.depth)
-            const toSize = getMindMapNodeSize(to.depth)
-            const start = getMindMapConnectionAnchor(from, fromSize.width, fromSize.height, sourceSide)
-            const end = getMindMapConnectionAnchor(to, toSize.width, toSize.height, targetSide)
-            const midpointX = (start.x + end.x) / 2
-            const midpointY = (start.y + end.y) / 2
-            const edgeDx = end.x - start.x
-            const edgeDy = end.y - start.y
-            const path = connectionStyle === 'orthogonal'
-              ? horizontal
-                ? `M ${start.x} ${start.y} L ${midpointX} ${start.y} L ${midpointX} ${end.y} L ${end.x} ${end.y}`
-                : `M ${start.x} ${start.y} L ${start.x} ${midpointY} L ${end.x} ${midpointY} L ${end.x} ${end.y}`
-              : horizontal
-                ? `M ${start.x} ${start.y} C ${start.x + edgeDx * 0.42} ${start.y} ${end.x - edgeDx * 0.42} ${end.y} ${end.x} ${end.y}`
-                : `M ${start.x} ${start.y} C ${start.x} ${start.y + edgeDy * 0.42} ${end.x} ${end.y - edgeDy * 0.42} ${end.x} ${end.y}`
-            return <path key={`edge-${node.id}`} className={`mindmap-connection mindmap-connection--${connectionStyle} mindmap-connection--${defaultColor(node, root.id, artifact.nodes.indexOf(node))}`} d={path} />
+            return <path key={`edge-${node.id}`} className={`mindmap-connection mindmap-connection--${connectionStyle} mindmap-connection--${defaultColor(node, root.id, artifact.nodes.indexOf(node))}`} d={getConnectionPath(from, to, connectionStyle)} />
+          })}
+          {(artifact.crossLinks ?? []).filter((link) => visibleNodeIds.has(link.fromId) && visibleNodeIds.has(link.toId)).map((link) => {
+            const fromNode = artifact.nodes.find((node) => node.id === link.fromId)
+            const toNode = artifact.nodes.find((node) => node.id === link.toId)
+            if (!fromNode || !toNode) return null
+            const path = getConnectionPath(positionFor(fromNode), positionFor(toNode), connectionStyle)
+            const active = selectedCrossLinkId === link.id
+            return <g key={`cross-link-${link.id}`} className={`mindmap-cross-link${active ? ' mindmap-cross-link--selected' : ''}`} role="button" tabIndex={0} aria-label={`跨节点连接：${fromNode.text} 与 ${toNode.text}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); selectCrossLink(link); event.currentTarget.focus() }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectCrossLink(link) } if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCrossLink(link.id) } }}>
+              <title>{`跨节点连接：${fromNode.text} — ${toNode.text}`}</title>
+              <path className="mindmap-cross-link-hit" d={path} />
+              <path className="mindmap-cross-link-line" d={path} />
+            </g>
           })}
           {visibleNodes.map((node) => {
             const position = positionFor(node)
@@ -641,7 +746,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const maxLabelChars = Math.max(3, Math.floor((nodeWidth - 24) / labelFontSize))
             const childCount = artifact.nodes.filter((child) => child.parentId === node.id).length
             const hiddenCount = node.collapsed ? getDescendantCount(node.id, artifact.nodes) : 0
-            return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${position.depth === 0 ? ' mindmap-node--root' : ''}${selectedNode ? ' canvas-node--selected' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={`编辑节点：${node.text}`} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
+            return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${position.depth === 0 ? ' mindmap-node--root' : ''}${selectedNode ? ' canvas-node--selected' : ''}${connectionMode ? ' mindmap-node--connect-mode' : ''}${connectionMode && connectingFromId === node.id ? ' mindmap-node--connection-source' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={connectionMode ? `${connectingFromId ? '选择目标节点' : '选择连接起点'}：${node.text}` : `编辑节点：${node.text}`} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
               <title>{node.text}</title>
               <rect className="canvas-node-shape" width={nodeWidth} height={nodeHeight} rx={Math.min(position.depth === 0 ? 17 : 13, nodeHeight / 2)} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               {editingId === node.id ? <foreignObject className="mindmap-inline-editor" x="4" y="4" width={nodeWidth - 8} height={nodeHeight - 8}>
@@ -685,6 +790,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       {exportNotice && <div className="canvas-export-status" role="status">{exportNotice}</div>}
       <div className="canvas-tool-rail" role="toolbar" aria-label="思维导图工具">
         <button className="canvas-tool-primary" type="button" aria-label="添加节点" title="添加节点" onClick={addNode}><Icon name="plus" size={18} /></button>
+        <button className={`direction-button${connectionMode ? ' direction-button--active' : ''}`} type="button" aria-label={connectionMode ? '退出跨节点连接' : '跨节点连接'} title={connectionMode ? '退出跨节点连接 · Esc' : '依次点击两个节点建立跨节点连接'} aria-pressed={connectionMode} onClick={() => { if (connectionMode) cancelConnectionMode(); else { setConnectionMode(true); setConnectingFromId(null); setSelectedCrossLinkId(null); setConnectionNotice('') } }} onKeyDown={(event) => { if (event.key === 'Escape') cancelConnectionMode() }}><Icon name="link" size={16} /></button>
         <div className="history-controls" role="group" aria-label="撤销与重做"><button className="direction-button" type="button" aria-label="撤销" title="撤销 Ctrl+Z" disabled={!historyStatus.canUndo} onClick={undo}><Icon name="undo" size={16} /></button><button className="direction-button" type="button" aria-label="重做" title="重做 Ctrl+Shift+Z" disabled={!historyStatus.canRedo} onClick={redo}><Icon name="redo" size={16} /></button></div>
         <div className="canvas-tool-separator" />
         <div className="direction-controls" role="group" aria-label="布局方向">
@@ -704,6 +810,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
       </div>
       {selected && inspectorOpen && <aside className="canvas-inspector" aria-label="节点属性">
         <div className="canvas-inspector-heading"><span>节点</span>{selected.id !== root.id && <div className="canvas-inspector-actions"><button type="button" aria-label="复制节点分支" title="复制节点分支" onClick={duplicateSelected}><Icon name="duplicate" size={15} /></button><button type="button" aria-label="删除节点" title="删除节点" onClick={deleteNode}><Icon name="trash" size={15} /></button></div>}</div>
+        {selectedCrossLink && <div className="mindmap-cross-link-inspector"><span className="canvas-label">选中的跨节点连线</span><p>{artifact.nodes.find((node) => node.id === selectedCrossLink.fromId)?.text} — {artifact.nodes.find((node) => node.id === selectedCrossLink.toId)?.text}</p><button type="button" onClick={() => removeCrossLink(selectedCrossLink.id)}><Icon name="trash" size={13} />删除连线</button></div>}
         <label className="canvas-label" htmlFor="mindmap-node-name">内容</label>
         <input id="mindmap-node-name" value={selected.text} onChange={(event) => commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, text: event.target.value } : node) }, 'node-text')} />
         {selected.id !== root.id && <>
@@ -715,7 +822,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
         <label className="canvas-label canvas-opacity-label" htmlFor="mindmap-node-opacity"><span>填充透明度</span><output htmlFor="mindmap-node-opacity">{selected.opacity ?? 100}%</output></label>
         <input className="canvas-opacity-slider" id="mindmap-node-opacity" type="range" min="0" max="100" step="5" value={selected.opacity ?? 100} aria-label="节点填充透明度" onChange={(event) => { const opacity = Number(event.target.value); commitChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === selected.id ? { ...node, opacity } : node) }, 'opacity') }} onPointerUp={finishHistoryGroup} onKeyUp={finishHistoryGroup} />
       </aside>}
-      <div className="canvas-help">拖动节点 · 空白处平移 · 滚轮缩放</div>
+      <div className={`canvas-help${connectionMode ? ' canvas-help--connection' : ''}`} role={connectionMode ? 'status' : undefined}>{connectionMode ? connectionNotice || (connectingFromId ? '点击终点 · Esc 取消' : '点击起点 · Esc 取消') : '拖动节点 · 空白处平移 · 滚轮缩放'}</div>
     </div>
   )
 }

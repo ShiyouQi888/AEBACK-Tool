@@ -561,6 +561,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .mindmap-connection--amber { stroke: #dfc08f; }
 .mindmap-connection--coral { stroke: #e0aaa4; }
 .mindmap-connection--slate { stroke: #bdc5d0; }
+.mindmap-cross-link { cursor: pointer; outline: none; }
+.mindmap-cross-link-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
+.mindmap-cross-link-line { fill: none; stroke: var(--aeback-brand); stroke-width: 2; stroke-dasharray: 7 5; stroke-linecap: round; pointer-events: none; opacity: .86; transition: stroke 120ms ease, stroke-width 120ms ease, opacity 120ms ease; }
+.mindmap-cross-link--selected .mindmap-cross-link-line, .mindmap-cross-link:focus-visible .mindmap-cross-link-line { stroke: var(--aeback-accent); stroke-width: 3; opacity: 1; }
+.mindmap-node--connect-mode { cursor: crosshair; }
+.mindmap-node--connect-mode .mindmap-add-handle, .mindmap-node--connect-mode .mindmap-collapse-handle { opacity: 0 !important; pointer-events: none !important; }
+.mindmap-node--connection-source .canvas-node-shape { stroke: var(--aeback-brand); stroke-width: 3; filter: drop-shadow(0 0 7px rgba(136, 57, 242, .3)); }
+.mindmap-cross-link-inspector { margin: 13px 0 3px; padding: 10px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-canvas); }
+.mindmap-cross-link-inspector p { margin: 5px 0 9px; overflow-wrap: anywhere; color: var(--aeback-ink); font-size: 11px; line-height: 1.5; }
+.mindmap-cross-link-inspector button { min-height: 27px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--aeback-danger); border: 1px solid var(--aeback-line); border-radius: 5px; background: var(--aeback-surface); font: inherit; font-size: 11px; cursor: pointer; }
+.canvas-help--connection { color: var(--aeback-brand); font-weight: 600; }
 .knowledge-node-halo { fill: rgba(255, 74, 11, .035); stroke: transparent; transition: fill 120ms ease, stroke 120ms ease; }
 .knowledge-node-shape--root[data-color="blue"], .knowledge-node-shape--leaf[data-color="blue"] { fill: #b7c2ff; stroke: #7589eb; }
 .knowledge-node-shape--root[data-color="violet"], .knowledge-node-shape--leaf[data-color="violet"] { fill: #d4b7ff; stroke: #a879da; }
