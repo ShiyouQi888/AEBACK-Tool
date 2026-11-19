@@ -215,3 +215,27 @@
   .main-content--table { padding: 0; }
   .main-content--table > .table-editor-shell { border-radius: 0; }
 }
+
+/* Aeback smart document — full workspace editing area without an outer card. */
+.main-area--document { height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.main-area--document .app-header { flex: 0 0 auto; }
+.main-content--document { width: 100%; max-width: none; min-height: 0; flex: 1 1 auto; display: flex; overflow: hidden; margin: 0; padding: 0; }
+.main-content--document > .document-editor-shell { width: 100%; min-width: 0; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-radius: 0; background: var(--aeback-surface); }
+.main-content--document .editor-commandbar, .main-content--document .document-formatbar, .main-content--document .document-findbar, .main-content--document .editor-statusbar { flex: 0 0 auto; }
+.main-content--document .document-layout { min-height: 0; flex: 1 1 auto; overflow: hidden; grid-template-rows: minmax(0, 1fr); }
+.main-content--document .document-outline { height: 100%; min-height: 0; max-height: none; }
+.main-content--document .document-panes { height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.main-content--document .document-panes--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.main-content--document .document-source, .main-content--document .document-rendered { height: 100%; min-height: 0; box-sizing: border-box; }
+
+@media (max-width: 1000px) {
+  .main-content--document .document-panes--split { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  .main-content--document .document-panes--split .document-source { border-right: 0; border-bottom: 1px solid var(--aeback-line); }
+}
+
+@media (max-width: 680px) {
+  .main-area--document { height: calc(100dvh - 58px); min-height: 0; }
+  .main-content--document { padding: 0; }
+  .main-content--document .document-outline { max-height: 150px; }
+  .main-content--document .document-source, .main-content--document .document-rendered { padding: 24px 16px; font-size: 14px; }
+}

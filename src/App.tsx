@@ -227,7 +227,7 @@ function App() {
   return (
     <div className="aeback-app">
       <Sidebar view={view} artifacts={artifacts} selectedId={selectedId} onNavigate={navigate} onOpen={openArtifact} onExport={exportWorkspace} />
-      <main className={`main-area${selectedArtifact?.type === 'table' ? ' main-area--table' : ''}`}>
+      <main className={`main-area${selectedArtifact?.type === 'table' ? ' main-area--table' : ''}${selectedArtifact?.type === 'document' ? ' main-area--document' : ''}`}>
         <header className="app-header">
           <div className="heading-area">
             {selectedArtifact && <button className="back-button" type="button" aria-label="返回文件列表" onClick={() => { setSelectedId(null); setView(selectedArtifact.type) }}><Icon name="back" size={17} /></button>}
@@ -245,7 +245,7 @@ function App() {
             </div>
           </div>
         </header>
-        <div className={`main-content${selectedArtifact ? ' main-content--editor' : ''}${selectedArtifact?.type === 'table' ? ' main-content--table' : ''}`}>
+        <div className={`main-content${selectedArtifact ? ' main-content--editor' : ''}${selectedArtifact?.type === 'table' ? ' main-content--table' : ''}${selectedArtifact?.type === 'document' ? ' main-content--document' : ''}`}>
           {selectedArtifact ? <Suspense fallback={<div className="tool-empty" role="status">正在打开…</div>}>{renderArtifact()}</Suspense> : view === 'library' ? renderLibrary() : renderToolList(view)}
         </div>
       </main>
