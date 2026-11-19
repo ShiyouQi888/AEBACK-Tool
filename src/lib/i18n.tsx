@@ -60,6 +60,8 @@ const catalogs = {
       ['新建', 'New'],
       ['返回文件列表', 'Back to files'],
       ['本地已保存', 'Saved locally'],
+      ['正在读取本地工作区…', 'Loading local workspace…'],
+      ['正在保存…', 'Saving…'],
       ['搜索文件', 'Search files'],
       ['搜索', 'Search'],
       ['导入文章', 'Import article'],

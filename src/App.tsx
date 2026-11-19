@@ -1,5 +1,5 @@
 // Aeback personal tools — one small workspace for maps, graphs, documents, and tables.
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ArticleImportDialog from './components/ArticleImportDialog'
 import Icon from './components/Icon'
 import KnowledgeGraphEditor from './components/KnowledgeGraphEditor'
@@ -66,7 +66,11 @@ function App() {
       return 'dark'
     }
   })
-  const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(() => loadWorkspace(starterArtifacts))
+  const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(starterArtifacts)
+  const [workspaceReady, setWorkspaceReady] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const artifactsRef = useRef(artifacts)
+  artifactsRef.current = artifacts
   const [view, setView] = useState<WorkspaceView>('library')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -90,7 +94,42 @@ function App() {
     }
   }, [theme])
 
-  useEffect(() => { setSaveError(saveWorkspace(artifacts)) }, [artifacts])
+  useEffect(() => {
+    let active = true
+    void loadWorkspace(starterArtifacts).then((loaded) => {
+      if (!active) return
+      setArtifacts(loaded)
+      setWorkspaceReady(true)
+    }).catch(() => {
+      if (!active) return
+      setArtifacts(starterArtifacts)
+      setWorkspaceReady(true)
+    })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!workspaceReady) return
+    let active = true
+    setSaveError(null)
+    setIsSaving(true)
+    const timeout = window.setTimeout(() => {
+      void saveWorkspace(artifacts).then((error) => {
+        if (!active) return
+        setSaveError(error)
+        setIsSaving(false)
+      })
+    }, 250)
+    const saveOnPageHide = () => {
+      window.clearTimeout(timeout)
+      void saveWorkspace(artifactsRef.current)
+    }
+    window.addEventListener('pagehide', saveOnPageHide)
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+      window.removeEventListener('pagehide', saveOnPageHide)
+    }
+  }, [artifacts, workspaceReady])
   useEffect(() => {
     try {
       window.localStorage.setItem(sidebarCollapsedStorageKey, String(sidebarCollapsed))
@@ -211,6 +250,8 @@ function App() {
     else createArtifact(view)
   }
 
+  if (!workspaceReady) return <main className="workspace-loading" role="status">{t('正在读取本地工作区…')}</main>
+
   const renderLibrary = () => (
     <section className="library-page">
       <div className="library-hero">
@@ -286,7 +327,7 @@ function App() {
             {selectedArtifact ? <input aria-label={t('文件名称')} className="artifact-title-input" value={selectedArtifact.title} onChange={(event) => updateArtifact({ ...selectedArtifact, title: event.target.value })} /> : <h1>{pageTitle}</h1>}
           </div>
           <div className="header-actions">
-            {selectedArtifact && <span className={`editor-save-status${saveError ? ' editor-save-status--error' : ''}`} role="status">{saveError ? t(saveError) : t('本地已保存')}</span>}
+            {selectedArtifact && <span className={`editor-save-status${saveError ? ' editor-save-status--error' : ''}`} role="status">{saveError ? t(saveError) : isSaving ? t('正在保存…') : t('本地已保存')}</span>}
             {!selectedArtifact && <label className="global-search"><Icon name="search" size={16} /><input aria-label={t('搜索文件')} value={query} placeholder={t('搜索')} onChange={(event) => setQuery(event.target.value)} /></label>}
             {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />{t('导入文章')}</button>}
             {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label={t('删除文件')} title={t('删除文件')} onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
