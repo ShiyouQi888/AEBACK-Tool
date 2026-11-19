@@ -15,6 +15,12 @@ const colors: Record<NodeColor, { fill: string; stroke: string; edge: string }> 
 }
 const colorNames = Object.keys(colors) as NodeColor[]
 
+export function getMindMapNodeSize(depth: number) {
+  if (depth <= 0) return { width: 178, height: 64 }
+  const scale = 1 / (1 + 0.055 * (depth - 1))
+  return { width: 154 * scale, height: 54 * scale }
+}
+
 function escapeXml(value: string) {
   return value.replace(/[<>&"']/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[character] ?? character)
 }
@@ -27,8 +33,8 @@ function resolvedColor(node: MindMapNode, rootId: string, index: number): NodeCo
   return node.color ?? (node.id === rootId ? 'blue' : colorNames[(index - 1 + colorNames.length) % colorNames.length])
 }
 
-function labelFor(node: MindMapNode, depth: number) {
-  const limit = depth === 0 ? 12 : 10
+function labelFor(node: MindMapNode, width: number) {
+  const limit = Math.max(3, Math.floor((width - 24) / 12))
   return node.text.length > limit ? `${node.text.slice(0, limit - 1)}…` : node.text
 }
 
@@ -36,12 +42,11 @@ export function createMindMapSvg(artifact: MindMapArtifact, positions: Map<strin
   const root = artifact.nodes.find((node) => node.parentId === null) ?? artifact.nodes[0]
   if (!root) throw new Error('思维导图没有可导出的节点。')
 
-  const nodeWidth = (depth: number) => depth === 0 ? 178 : 154
-  const nodeHeight = (depth: number) => depth === 0 ? 64 : 54
   const bounds = artifact.nodes.reduce((current, node) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0, depth: 1 }
-    const width = nodeWidth(point.depth) / 2
-    const height = nodeHeight(point.depth) / 2
+    const size = getMindMapNodeSize(point.depth)
+    const width = size.width / 2
+    const height = size.height / 2
     return {
       minX: Math.min(current.minX, point.x - width),
       minY: Math.min(current.minY, point.y - height),
@@ -80,13 +85,13 @@ export function createMindMapSvg(artifact: MindMapArtifact, positions: Map<strin
   }).join('\n')
   const nodes = artifact.nodes.map((node) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0, depth: 1 }
-    const nodeW = nodeWidth(point.depth)
-    const nodeH = nodeHeight(point.depth)
+    const { width: nodeW, height: nodeH } = getMindMapNodeSize(point.depth)
     const x = toX(point.x) - nodeW / 2
     const y = toY(point.y) - nodeH / 2
     const color = colors[resolvedColor(node, root.id, indexById.get(node.id) ?? 0)]
     const opacity = Math.max(0, Math.min(100, node.opacity ?? 100)) / 100
-    return `<g><title>${escapeXml(node.text)}</title><rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="${point.depth === 0 ? 16 : 13}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="1.5"/><text x="${toX(point.x)}" y="${toY(point.y) + 4}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="12" font-weight="570">${escapeXml(labelFor(node, point.depth))}</text></g>`
+    const fontSize = Math.max(6, 12 * nodeH / 54)
+    return `<g><title>${escapeXml(node.text)}</title><rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="${point.depth === 0 ? 16 : 13}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="1.5"/><text x="${toX(point.x)}" y="${toY(point.y) + fontSize / 3}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${fontSize}" font-weight="570">${escapeXml(labelFor(node, nodeW))}</text></g>`
   }).join('\n')
   const brandY = height - 18
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- AEBACK mind map export -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description"><title id="title">${escapeXml(artifact.title)} · AEBACK</title><desc id="description">AEBACK mind map with ${artifact.nodes.length} nodes.</desc><rect width="100%" height="100%" fill="#ffffff"/><g>${edges}\n${nodes}</g><text x="${width - padding}" y="${brandY}" text-anchor="end" fill="#9aa1ac" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10" letter-spacing="1.5">AEBACK</text></svg>`

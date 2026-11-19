@@ -44,17 +44,16 @@ function createId() {
   return `knowledge-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`
 }
 
-function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], width: number, height: number, offsetX = 0, offsetY = 0) {
-  const positions = new Map<string, { x: number; y: number }>()
+function getGraphDepths(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[]) {
+  const depths = new Map<string, number>()
   const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
-  if (!root) return positions
-  const center = { x: offsetX + width / 2, y: offsetY + height / 2 }
+  if (!root) return depths
   const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]))
   edges.forEach((edge) => {
     adjacency.get(edge.fromId)?.push(edge.toId)
     adjacency.get(edge.toId)?.push(edge.fromId)
   })
-  const depths = new Map<string, number>([[root.id, 0]])
+  depths.set(root.id, 0)
   const queue = [root.id]
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const id = queue[cursor]
@@ -66,6 +65,15 @@ function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: Knowledge
   }
   const maxDepth = Math.max(1, ...depths.values())
   nodes.forEach((node) => { if (!depths.has(node.id)) depths.set(node.id, maxDepth + 1) })
+  return depths
+}
+
+function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], width: number, height: number, offsetX = 0, offsetY = 0) {
+  const positions = new Map<string, { x: number; y: number }>()
+  const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
+  if (!root) return positions
+  const center = { x: offsetX + width / 2, y: offsetY + height / 2 }
+  const depths = getGraphDepths(nodes, root.id, edges)
   const rings = new Map<number, KnowledgeNode[]>()
   nodes.filter((node) => node.id !== root.id).forEach((node) => {
     const depth = depths.get(node.id) ?? 1
@@ -82,16 +90,20 @@ function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: Knowledge
   return positions
 }
 
-function getNodeHalfSize(node: KnowledgeNode, rootId: string) {
-  const radius = node.id === rootId ? 64 : 58
+function getNodeHalfSize(node: KnowledgeNode, rootId: string, depth = 1) {
+  const radius = node.id === rootId ? 64 : getGraphRadius(depth)
   return { width: radius, height: radius }
 }
 
-function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, toward: { x: number; y: number }, rootId: string) {
+function getGraphRadius(depth: number) {
+  return 64 / (1 + 0.075 * Math.max(1, depth))
+}
+
+function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, toward: { x: number; y: number }, rootId: string, depth: number) {
   const dx = toward.x - center.x
   const dy = toward.y - center.y
   const length = Math.max(1, Math.hypot(dx, dy))
-  const half = getNodeHalfSize(node, rootId)
+  const half = getNodeHalfSize(node, rootId, depth)
   return { x: center.x + dx / length * half.width, y: center.y + dy / length * half.height }
 }
 
@@ -122,6 +134,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const nodeOrderKey = artifact.nodes.map((node) => node.id).join('\u0000')
   const selected = nodeById.get(selectedId) ?? root
   const connectionStyle = artifact.connectionStyle ?? 'curve'
+  const graphDepths = useMemo(() => getGraphDepths(artifact.nodes, artifact.rootId, artifact.edges), [nodeOrderKey, artifact.edges, artifact.rootId])
   const fallbackPositions = useMemo(() => getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY), [nodeOrderKey, artifact.edges, artifact.rootId, layoutBounds])
   const positionFor = (node: KnowledgeNode) => ({ x: node.x ?? fallbackPositions.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallbackPositions.get(node.id)?.y ?? size.height / 2 })
   const moveNode = (id: string, x: number, y: number) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })
@@ -159,7 +172,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     if (!rootNode) return
     const bounds = artifact.nodes.reduce((current, node) => {
       const point = positionFor(node)
-      const half = getNodeHalfSize(node, rootNode.id)
+      const half = getNodeHalfSize(node, rootNode.id, graphDepths.get(node.id) ?? 1)
       return { minX: Math.min(current.minX, point.x - half.width), minY: Math.min(current.minY, point.y - half.height), maxX: Math.max(current.maxX, point.x + half.width), maxY: Math.max(current.maxY, point.y + half.height) }
     }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
     canvas.fitBounds(bounds, layoutBounds.viewport)
@@ -171,14 +184,16 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     const parent = artifact.nodes.find((node) => node.id === parentId)
     if (!parent) return
     const origin = positionFor(parent)
+    const nodeDepth = (graphDepths.get(parentId) ?? 0) + 1
+    const nodeRadius = getGraphRadius(nodeDepth)
     const offset = side === 'right' ? { x: 214, y: 0 } : side === 'left' ? { x: -214, y: 0 } : side === 'up' ? { x: 0, y: -142 } : { x: 0, y: 142 }
     let x = origin.x + offset.x
     let y = origin.y + offset.y
     const hasCollision = (candidateX: number, candidateY: number) => artifact.nodes.some((node) => {
       const point = positionFor(node)
-      const half = getNodeHalfSize(node, rootNode.id)
-      return candidateX - 58 < point.x + half.width + 18 && candidateX + 58 > point.x - half.width - 18
-        && candidateY - 58 < point.y + half.height + 18 && candidateY + 58 > point.y - half.height - 18
+      const half = getNodeHalfSize(node, rootNode.id, graphDepths.get(node.id) ?? 1)
+      return candidateX - nodeRadius < point.x + half.width + 18 && candidateX + nodeRadius > point.x - half.width - 18
+        && candidateY - nodeRadius < point.y + half.height + 18 && candidateY + nodeRadius > point.y - half.height - 18
     })
     for (let attempt = 0; hasCollision(x, y) && attempt < artifact.nodes.length + 8; attempt += 1) {
       x += offset.x === 0 ? 0 : Math.sign(offset.x) * 214
@@ -251,7 +266,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     setSelectedEdgeId('')
     requestAnimationFrame(() => document.getElementById(`knowledge-node-${node.id}`)?.focus())
     const point = positionFor(node)
-    const half = getNodeHalfSize(node, rootNode.id)
+    const half = getNodeHalfSize(node, rootNode.id, graphDepths.get(node.id) ?? 1)
     canvas.fitBounds({ minX: point.x - half.width, minY: point.y - half.height, maxX: point.x + half.width, maxY: point.y + half.height }, layoutBounds.viewport)
   }
   const focusSearchResult = () => {
@@ -265,7 +280,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
     onChange({ ...artifact, nodes })
     const bounds = nodes.reduce((current, node) => {
       const point = positions.get(node.id) ?? positionFor(node)
-      const half = getNodeHalfSize(node, rootNode.id)
+      const half = getNodeHalfSize(node, rootNode.id, graphDepths.get(node.id) ?? 1)
       return { minX: Math.min(current.minX, point.x - half.width), minY: Math.min(current.minY, point.y - half.height), maxX: Math.max(current.maxX, point.x + half.width), maxY: Math.max(current.maxY, point.y + half.height) }
     }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
     canvas.fitBounds(bounds, layoutBounds.viewport)
@@ -275,7 +290,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const selectedColor = selected?.color ?? (selected?.id === rootNode.id ? 'green' : palette[Math.max(0, artifact.nodes.indexOf(selected)) % palette.length]?.value ?? 'blue')
 
   const closeExportMenu = () => { if (exportMenuRef.current) exportMenuRef.current.open = false }
-  const getExportSvg = () => createGraphSvg(artifact, new Map(artifact.nodes.map((node) => [node.id, positionFor(node)] as const)))
+  const getExportSvg = () => createGraphSvg(artifact, new Map(artifact.nodes.map((node) => [node.id, positionFor(node)] as const)), graphDepths)
   const exportSvg = () => {
     closeExportMenu()
     downloadText(artifact.title, 'svg', getExportSvg(), 'image/svg+xml;charset=utf-8')
@@ -316,10 +331,11 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
       setSearchQuery('')
       setSearchOpen(false)
       const fallback = getGraphLayout(project.nodes, project.rootId, project.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
+      const importedDepths = getGraphDepths(project.nodes, project.rootId, project.edges)
       const positions = new Map(project.nodes.map((node) => [node.id, { x: node.x ?? fallback.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallback.get(node.id)?.y ?? size.height / 2 }] as const))
       const bounds = project.nodes.reduce((current, node) => {
         const point = positions.get(node.id)!
-        const radius = getNodeHalfSize(node, project.rootId).width
+        const radius = getNodeHalfSize(node, project.rootId, importedDepths.get(node.id) ?? 1).width
         return { minX: Math.min(current.minX, point.x - radius), minY: Math.min(current.minY, point.y - radius), maxX: Math.max(current.maxX, point.x + radius), maxY: Math.max(current.maxY, point.y + radius) }
       }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
       canvas.fitBounds(bounds, layoutBounds.viewport)
@@ -358,8 +374,8 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             if (!fromNode || !toNode) return null
             const from = positionFor(fromNode)
             const to = positionFor(toNode)
-            const start = getEdgePoint(fromNode, from, to, rootNode.id)
-            const end = getEdgePoint(toNode, to, from, rootNode.id)
+            const start = getEdgePoint(fromNode, from, to, rootNode.id, graphDepths.get(fromNode.id) ?? 1)
+            const end = getEdgePoint(toNode, to, from, rootNode.id, graphDepths.get(toNode.id) ?? 1)
             const dx = end.x - start.x
             const dy = end.y - start.y
             const midpointX = (start.x + end.x) / 2
@@ -381,14 +397,18 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const color = node.color ?? (central ? 'green' : palette[index % palette.length]?.value ?? 'blue')
             const nodeKind = node.kind ?? (central ? 'concept' : 'idea')
             const dimmed = Boolean(searchQuery.trim() && !matchesSearch(node))
-            const half = getNodeHalfSize(node, rootNode.id)
+            const depth = graphDepths.get(node.id) ?? 1
+            const half = getNodeHalfSize(node, rootNode.id, depth)
+            const titleFontSize = Math.max(7, 12 * half.width / 64)
+            const kindFontSize = Math.max(6, 9 * half.width / 64)
+            const maxLabelChars = Math.max(3, Math.floor(half.width * 1.75 / titleFontSize))
             const sidePoints: Record<KnowledgeSide, { x: number; y: number }> = { up: { x: 0, y: -half.height }, right: { x: half.width, y: 0 }, down: { x: 0, y: half.height }, left: { x: -half.width, y: 0 } }
             return <g key={node.id} id={`knowledge-node-${node.id}`} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`编辑${kindLabels[nodeKind]}节点：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
               <title>{node.text}</title>
               <circle className="knowledge-node-halo" r={half.width + 9} />
               <circle className={`knowledge-node-shape ${central ? 'knowledge-node-shape--root' : 'knowledge-node-shape--leaf'}`} r={half.width} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
-              <text className="canvas-node-label knowledge-node-title" x="0" y="-2" textAnchor="middle">{node.text.length > 9 ? `${node.text.slice(0, 8)}…` : node.text}</text>
-              <text className="knowledge-node-kind" x="0" y="17" textAnchor="middle">{kindLabels[nodeKind]}</text>
+              <text className="canvas-node-label knowledge-node-title" x="0" y="-2" textAnchor="middle" style={{ fontSize: titleFontSize }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>
+              <text className="knowledge-node-kind" x="0" y={titleFontSize * 1.42} textAnchor="middle" style={{ fontSize: kindFontSize }}>{kindLabels[nodeKind]}</text>
               {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={`在节点${sideLabels[side]}添加关联节点`} onPointerDown={(event) => { event.stopPropagation(); setSelectedId(node.id) }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}
             </g>
           })}

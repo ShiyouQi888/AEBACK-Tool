@@ -4,7 +4,7 @@ import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
 import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
-import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, parseMindMapProject } from '../lib/mindmap-export'
+import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, getMindMapNodeSize, parseMindMapProject } from '../lib/mindmap-export'
 import { downloadCanvasRaster } from '../lib/canvas-export'
 import { downloadText, readTextFile } from '../lib/files'
 import type { MindMapArtifact, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
@@ -251,8 +251,9 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   const fitLayout = (nodes: MindMapNode[], positions: Map<string, { x: number; y: number; depth: number }>, viewport = layoutBounds.viewport) => {
     const bounds = nodes.reduce((current, node) => {
       const point = positions.get(node.id) ?? { x: size.width / 2, y: size.height / 2, depth: 1 }
-      const halfWidth = point.depth === 0 ? 89 : 77
-      const halfHeight = point.depth === 0 ? 32 : 27
+      const nodeSize = getMindMapNodeSize(point.depth)
+      const halfWidth = nodeSize.width / 2
+      const halfHeight = nodeSize.height / 2
       return { minX: Math.min(current.minX, point.x - halfWidth), minY: Math.min(current.minY, point.y - halfHeight), maxX: Math.max(current.maxX, point.x + halfWidth), maxY: Math.max(current.maxY, point.y + halfHeight) }
     }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
     canvas.fitBounds(bounds, viewport)
@@ -294,12 +295,14 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     let x = parentPosition.x + offset.x
     let y = parentPosition.y + offset.y
     const nodeDepth = parentPosition.depth + 1
-    const halfWidth = 77
-    const halfHeight = 27
+    const nodeSize = getMindMapNodeSize(nodeDepth)
+    const halfWidth = nodeSize.width / 2
+    const halfHeight = nodeSize.height / 2
     const hasCollision = (candidateX: number, candidateY: number) => artifact.nodes.some((existing) => {
       const position = positionFor(existing)
-      const existingHalfWidth = position.depth === 0 ? 89 : 77
-      const existingHalfHeight = position.depth === 0 ? 32 : 27
+      const existingSize = getMindMapNodeSize(position.depth)
+      const existingHalfWidth = existingSize.width / 2
+      const existingHalfHeight = existingSize.height / 2
       return candidateX - halfWidth < position.x + existingHalfWidth + 14
         && candidateX + halfWidth > position.x - existingHalfWidth - 14
         && candidateY - halfHeight < position.y + existingHalfHeight + 14
@@ -616,10 +619,11 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
           })}
           {visibleNodes.map((node) => {
             const position = positionFor(node)
-            const nodeWidth = position.depth === 0 ? 178 : 154
-            const nodeHeight = position.depth === 0 ? 64 : 54
+            const { width: nodeWidth, height: nodeHeight } = getMindMapNodeSize(position.depth)
             const selectedNode = node.id === selected?.id
             const color = defaultColor(node, root.id, artifact.nodes.indexOf(node))
+            const labelFontSize = Math.max(6, 12 * nodeHeight / 54)
+            const maxLabelChars = Math.max(3, Math.floor((nodeWidth - 24) / labelFontSize))
             const childCount = artifact.nodes.filter((child) => child.parentId === node.id).length
             const hiddenCount = node.collapsed ? getDescendantCount(node.id, artifact.nodes) : 0
             return <g key={node.id} id={`mindmap-node-${node.id}`} data-node-id={node.id} className={`canvas-node mindmap-node${selectedNode ? ' canvas-node--selected' : ''}`} transform={`translate(${position.x - nodeWidth / 2} ${position.y - nodeHeight / 2})`} role="button" tabIndex={0} aria-label={`编辑节点：${node.text}`} onPointerDown={(event) => handleNodePointerDown(event, node, position)} onKeyDown={(event) => activateNode(event, node)}>
@@ -627,7 +631,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
               <rect className="canvas-node-shape" width={nodeWidth} height={nodeHeight} rx={position.depth === 0 ? 16 : 13} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               {editingId === node.id ? <foreignObject className="mindmap-inline-editor" x="4" y="4" width={nodeWidth - 8} height={nodeHeight - 8}>
                 <input ref={inlineInputRef} aria-label="编辑节点文字" value={editingText} onChange={(event) => setEditingText(event.target.value)} onBlur={commitInlineEdit} onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
-              </foreignObject> : <text className="canvas-node-label" x={nodeWidth / 2} y={nodeHeight / 2 + 4} textAnchor="middle">{node.text.length > (position.depth === 0 ? 12 : 10) ? `${node.text.slice(0, position.depth === 0 ? 11 : 9)}…` : node.text}</text>}
+              </foreignObject> : <text className="canvas-node-label" x={nodeWidth / 2} y={nodeHeight / 2 + labelFontSize / 3} textAnchor="middle" style={{ fontSize: labelFontSize }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>}
               {editingId !== node.id && (['up', 'right', 'down', 'left'] as MindMapSide[]).map((side) => {
                 const point = side === 'up' ? { x: nodeWidth / 2, y: 0 }
                   : side === 'right' ? { x: nodeWidth, y: nodeHeight / 2 }

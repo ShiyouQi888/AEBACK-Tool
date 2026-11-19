@@ -549,7 +549,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .knowledge-node-shape--root[data-color="coral"], .knowledge-node-shape--leaf[data-color="coral"] { fill: #ffb9ae; stroke: #d87e72; }
 .knowledge-node-shape--root[data-color="slate"], .knowledge-node-shape--leaf[data-color="slate"] { fill: #c2ccdc; stroke: #8996aa; }
 .knowledge-node .canvas-node-label { font-size: 11px; }
-.knowledge-node-title { font-size: 12px !important; font-weight: 620; }
+.knowledge-node-title { font-size: 12px; font-weight: 620; }
 .knowledge-node-kind { fill: #424957; font-family: inherit; font-size: 9px; font-weight: 570; pointer-events: none; user-select: none; }
 .knowledge-node-shape { stroke-width: 1.4; }
 .knowledge-node--selected .knowledge-node-halo { fill: rgba(255, 74, 11, .10); stroke: rgba(255, 74, 11, .28); }

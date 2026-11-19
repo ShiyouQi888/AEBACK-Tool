@@ -39,20 +39,21 @@ function kindFor(node: KnowledgeNode, rootId: string): KnowledgeNodeKind {
   return node.kind ?? (node.id === rootId ? 'concept' : 'idea')
 }
 
-function halfSize(node: KnowledgeNode, rootId: string) {
-  return node.id === rootId ? 64 : 58
+function halfSize(node: KnowledgeNode, rootId: string, depths: Map<string, number>) {
+  return node.id === rootId ? 64 : 64 / (1 + 0.075 * Math.max(1, depths.get(node.id) ?? 1))
 }
 
-function nodeLabel(text: string) {
-  return text.length > 9 ? `${text.slice(0, 8)}…` : text
+function nodeLabel(text: string, radius: number, fontSize: number) {
+  const limit = Math.max(3, Math.floor(radius * 1.75 / fontSize))
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
 }
 
-export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, GraphExportPosition>) {
+export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, GraphExportPosition>, depths: Map<string, number>) {
   const root = artifact.nodes.find((node) => node.id === artifact.rootId) ?? artifact.nodes[0]
   if (!root) throw new Error('知识图谱没有可导出的节点。')
   const bounds = artifact.nodes.reduce((current, node) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0 }
-    const radius = halfSize(node, root.id)
+    const radius = halfSize(node, root.id, depths)
     return {
       minX: Math.min(current.minX, point.x - radius), minY: Math.min(current.minY, point.y - radius),
       maxX: Math.max(current.maxX, point.x + radius), maxY: Math.max(current.maxY, point.y + radius),
@@ -73,8 +74,10 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
     const dx = to.x - from.x
     const dy = to.y - from.y
     const length = Math.max(1, Math.hypot(dx, dy))
-    const start = { x: from.x + dx / length * halfSize(fromNode, root.id), y: from.y + dy / length * halfSize(fromNode, root.id) }
-    const end = { x: to.x - dx / length * halfSize(toNode, root.id), y: to.y - dy / length * halfSize(toNode, root.id) }
+    const fromRadius = halfSize(fromNode, root.id, depths)
+    const toRadius = halfSize(toNode, root.id, depths)
+    const start = { x: from.x + dx / length * fromRadius, y: from.y + dy / length * fromRadius }
+    const end = { x: to.x - dx / length * toRadius, y: to.y - dy / length * toRadius }
     const edgeDx = end.x - start.x
     const edgeDy = end.y - start.y
     const midpointX = (start.x + end.x) / 2
@@ -89,12 +92,14 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
   }).join('\n')
   const nodes = artifact.nodes.map((node, index) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0 }
-    const radius = halfSize(node, root.id)
+    const radius = halfSize(node, root.id, depths)
     const color = colors[colorFor(node, root.id, index)]
     const opacity = Math.max(0, Math.min(100, node.opacity ?? 100)) / 100
     const kind = kindLabels[kindFor(node, root.id)]
+    const titleFontSize = Math.max(7, 12 * radius / 64)
+    const kindFontSize = Math.max(6, 9 * radius / 64)
     const description = node.description ? `<desc>${escapeXml(node.description)}</desc>` : ''
-    return `<g><title>${escapeXml(node.text)}</title>${description}<circle cx="${toX(point.x)}" cy="${toY(point.y)}" r="${radius}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="1.5"/><text x="${toX(point.x)}" y="${toY(point.y) - 2}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="12" font-weight="620">${escapeXml(nodeLabel(node.text))}</text><text x="${toX(point.x)}" y="${toY(point.y) + 17}" text-anchor="middle" fill="#424957" font-family="Inter, Microsoft YaHei, sans-serif" font-size="9" font-weight="570">${kind}</text></g>`
+    return `<g><title>${escapeXml(node.text)}</title>${description}<circle cx="${toX(point.x)}" cy="${toY(point.y)}" r="${radius}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="1.5"/><text x="${toX(point.x)}" y="${toY(point.y) - 2}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${titleFontSize}" font-weight="620">${escapeXml(nodeLabel(node.text, radius, titleFontSize))}</text><text x="${toX(point.x)}" y="${toY(point.y) + titleFontSize * 1.42}" text-anchor="middle" fill="#424957" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${kindFontSize}" font-weight="570">${kind}</text></g>`
   }).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- AEBACK knowledge graph export -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description"><title id="title">${escapeXml(artifact.title)} · AEBACK</title><desc id="description">AEBACK knowledge graph with ${artifact.nodes.length} nodes and ${artifact.edges.length} relationships.</desc><defs><marker id="aeback-graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#8993a2"/></marker></defs><rect width="100%" height="100%" fill="#ffffff"/><g>${edges}\n${nodes}</g><text x="${width - padding}" y="${height - 18}" text-anchor="end" fill="#9aa1ac" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10" letter-spacing="1.5">AEBACK</text></svg>`
 }
