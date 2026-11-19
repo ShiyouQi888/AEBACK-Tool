@@ -103,6 +103,7 @@ function App() {
       if (!target.closest('.create-anchor')) setCreateMenuOpen(false)
     }
     const onPointerDown = (event: PointerEvent) => dismissOutside(event.target)
+    const onClick = (event: MouseEvent) => dismissOutside(event.target)
     const onFocusIn = (event: FocusEvent) => dismissOutside(event.target)
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
@@ -115,12 +116,14 @@ function App() {
       }
       setCreateMenuOpen(false)
     }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('click', onClick)
+    document.addEventListener('focusin', onFocusIn, true)
     document.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('click', onClick)
+      document.removeEventListener('focusin', onFocusIn, true)
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [])
