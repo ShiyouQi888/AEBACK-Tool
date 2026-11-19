@@ -1,8 +1,9 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from 'react'
+import { toBlob } from 'html-to-image'
 import type { TableArtifact, TableCellColor, TableColumnType, TableRowHeight } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
-import { downloadText, readTextFile } from '../lib/files'
+import { downloadBlob, downloadText, readTextFile } from '../lib/files'
 import { adjustCellColors, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
 import Icon from './Icon'
 import TableImportDialog from './TableImportDialog'
@@ -21,6 +22,7 @@ const cellColors: Array<{ value: TableCellColor; label: string }> = [
 const rowHeights: Array<{ value: TableRowHeight; label: string }> = [
   { value: 'compact', label: '紧凑' }, { value: 'normal', label: '标准' }, { value: 'comfortable', label: '舒适' },
 ]
+const imagePlaceholder = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#252630"/><path d="M34 52l15-16 11 11 9-9 17 18H34z" fill="none" stroke="#737581" stroke-width="3"/><circle cx="45" cy="29" r="5" fill="#737581"/></svg>')}`
 
 function TableImageCell({ source }: { source: string }) {
   const [failed, setFailed] = useState(false)
@@ -44,6 +46,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const [sort, setSort] = useState<{ column: number; direction: 1 | -1 } | null>(null)
   const [page, setPage] = useState(0)
   const [message, setMessage] = useState('')
+  const [imageExporting, setImageExporting] = useState(false)
   const [importData, setImportData] = useState<string[][] | null>(null)
   const [firstHeader, setFirstHeader] = useState(true)
   const [importMode, setImportMode] = useState('replace')
@@ -281,6 +284,32 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
       downloadText(artifact.title, 'csv', '\uFEFF' + serializeDelimited([artifact.columns, ...artifact.rows]), 'text/csv;charset=utf-8')
     } else downloadText(artifact.title, 'csv', '\uFEFF' + serializeDelimited([artifact.columns, ...rows]), 'text/csv;charset=utf-8')
   }
+  const exportTableImage = async (format: 'png' | 'jpg') => {
+    const table = gridRef.current?.querySelector<HTMLTableElement>('.smart-table')
+    if (!table || imageExporting) return
+    setImageExporting(true)
+    setMessage('正在生成表格图片…')
+    try {
+      const backgroundColor = getComputedStyle(document.querySelector('.table-editor-shell') ?? table).backgroundColor
+      const pixelRatio = Math.min(1, Math.sqrt(14_000_000 / Math.max(1, table.scrollWidth * table.scrollHeight)))
+      const blob = await toBlob(table, {
+        type: format === 'jpg' ? 'image/jpeg' : 'image/png',
+        quality: 0.92,
+        pixelRatio,
+        backgroundColor,
+        imagePlaceholder,
+        onImageErrorHandler: () => {},
+        filter: (node) => !(node instanceof HTMLElement && node.matches('.table-resize-handle, button[aria-label="添加列"], button[aria-label^="排序第"], details')),
+      })
+      if (!blob) throw new Error('图片生成失败')
+      downloadBlob(artifact.title, format, blob)
+      setMessage(`已导出当前页 ${format.toUpperCase()} 图片（${pagedRows.length} 行${pixelRatio < 1 ? ' · 已自动缩放' : ''}）`)
+    } catch (error) {
+      setMessage(error instanceof Error ? `图片导出失败：${error.message}` : '图片导出失败')
+    } finally {
+      setImageExporting(false)
+    }
+  }
 
   return <section className="table-editor-shell aeback-table" onKeyDown={(event) => {
     if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
@@ -296,7 +325,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
         <details className="editor-menu table-settings-menu"><summary>表格设置</summary><div><span className="table-menu-label">行高</span>{rowHeights.map((height) => <button key={height.value} type="button" aria-pressed={(artifact.rowHeight ?? 'normal') === height.value} onClick={() => setRowHeight(height.value)}>{height.label}</button>)}</div></details>
         <details className="editor-menu table-fill-menu"><summary title="为选区填色">填色</summary><div><span className="table-menu-label">选区颜色</span><div className="table-color-options">{cellColors.map((color) => <button key={color.value} type="button" className="table-color-swatch" data-fill={color.value} aria-label={`${color.label}填色`} title={color.label} onClick={() => applyCellColor(color.value)} />)}</div><button type="button" onClick={() => applyCellColor()}>清除填色</button></div></details>
         <button className="tool-button" type="button" onClick={() => fileRef.current?.click()}>导入 CSV</button>
-        <details className="editor-menu"><summary>导出</summary><div><button type="button" onClick={() => exportCsv(false)}>CSV · 当前视图值</button><button type="button" onClick={() => exportCsv(true)}>CSV · 全表原始值与公式</button></div></details>
+        <details className="editor-menu"><summary>导出</summary><div><button type="button" onClick={() => exportCsv(false)}>CSV · 当前视图值</button><button type="button" onClick={() => exportCsv(true)}>CSV · 全表原始值与公式</button><span className="table-menu-label">图片 · 当前页</span><button type="button" disabled={imageExporting} onClick={() => void exportTableImage('png')}>PNG</button><button type="button" disabled={imageExporting} onClick={() => void exportTableImage('jpg')}>JPG</button></div></details>
         <button className="tool-button" type="button" disabled={artifact.columns.length >= MAX_COLUMNS} onClick={() => changeStructure('column', 'insert', artifact.columns.length)}><Icon name="column" size={15} />列</button>
         <button className="tool-button tool-button--accent" type="button" disabled={artifact.rows.length >= MAX_ROWS} onClick={() => changeStructure('row', 'insert', artifact.rows.length)}><Icon name="plus" size={15} />行</button>
       </div>
