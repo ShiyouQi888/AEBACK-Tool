@@ -70,7 +70,10 @@ export type TableArtifact = ArtifactBase & {
   type: 'table'
   columns: string[]
   rows: string[][]
+  columnTypes?: TableColumnType[]
 }
+
+export type TableColumnType = 'text' | 'number' | 'date' | 'checkbox'
 
 export type WorkspaceArtifact = MindMapArtifact | GraphArtifact | DocumentArtifact | TableArtifact
 

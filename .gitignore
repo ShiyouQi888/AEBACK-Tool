@@ -4,3 +4,5 @@ dist/
 .vite/
 *.local
 *.tsbuildinfo
+.playwright-cli/
+output/

@@ -1,12 +1,10 @@
 // Aeback personal tools — one small workspace for maps, graphs, documents, and tables.
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import ArticleImportDialog from './components/ArticleImportDialog'
-import DocumentEditor from './components/DocumentEditor'
 import Icon from './components/Icon'
 import KnowledgeGraphEditor from './components/KnowledgeGraphEditor'
 import MindMapEditor from './components/MindMapEditor'
 import Sidebar from './components/Sidebar'
-import TableEditor from './components/TableEditor'
 import ThemeToggleButton, { type ThemeMode } from './components/ThemeToggleButton'
 import { starterArtifacts } from './data'
 import { parseArticle } from './lib/article'
@@ -14,6 +12,8 @@ import { loadWorkspace, saveWorkspace } from './lib/storage'
 import { TOOL_LABELS, type ToolType, type WorkspaceArtifact, type WorkspaceView } from './types'
 
 const toolTypes: ToolType[] = ['mindmap', 'graph', 'document', 'table']
+const DocumentEditor = lazy(() => import('./components/DocumentEditor'))
+const TableEditor = lazy(() => import('./components/TableEditor'))
 const themeStorageKey = 'aeback-theme'
 const toolDescriptions: Record<ToolType, string> = {
   mindmap: '把复杂主题拆开，找到清晰的结构。',
@@ -67,6 +67,7 @@ function App() {
   const [query, setQuery] = useState('')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -77,7 +78,7 @@ function App() {
     }
   }, [theme])
 
-  useEffect(() => saveWorkspace(artifacts), [artifacts])
+  useEffect(() => { setSaveError(saveWorkspace(artifacts)) }, [artifacts])
 
   const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedId)
   const filteredArtifacts = useMemo(() => artifacts
@@ -215,8 +216,8 @@ function App() {
   const renderArtifact = () => {
     if (!selectedArtifact) return null
     switch (selectedArtifact.type) {
-      case 'document': return <DocumentEditor artifact={selectedArtifact} onChange={updateArtifact} />
-      case 'table': return <TableEditor artifact={selectedArtifact} onChange={updateArtifact} />
+      case 'document': return <DocumentEditor key={selectedArtifact.id} artifact={selectedArtifact} onChange={updateArtifact} />
+      case 'table': return <TableEditor key={selectedArtifact.id} artifact={selectedArtifact} onChange={updateArtifact} />
     }
   }
 
@@ -233,6 +234,7 @@ function App() {
             {selectedArtifact ? <input aria-label="文件名称" className="artifact-title-input" value={selectedArtifact.title} onChange={(event) => updateArtifact({ ...selectedArtifact, title: event.target.value })} /> : <h1>{pageTitle}</h1>}
           </div>
           <div className="header-actions">
+            {selectedArtifact && <span className={`editor-save-status${saveError ? ' editor-save-status--error' : ''}`} role="status">{saveError || '本地已保存'}</span>}
             {!selectedArtifact && <label className="global-search"><Icon name="search" size={16} /><input aria-label="搜索文件" value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} /></label>}
             {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>}
             {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label="删除文件" title="删除文件" onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
@@ -244,7 +246,7 @@ function App() {
           </div>
         </header>
         <div className={`main-content${selectedArtifact ? ' main-content--editor' : ''}`}>
-          {selectedArtifact ? renderArtifact() : view === 'library' ? renderLibrary() : renderToolList(view)}
+          {selectedArtifact ? <Suspense fallback={<div className="tool-empty" role="status">正在打开…</div>}>{renderArtifact()}</Suspense> : view === 'library' ? renderLibrary() : renderToolList(view)}
         </div>
       </main>
       {importOpen && <ArticleImportDialog onClose={() => setImportOpen(false)} onImport={importArticle} />}

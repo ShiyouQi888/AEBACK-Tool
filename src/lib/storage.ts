@@ -17,7 +17,8 @@ export function loadWorkspace(fallback: WorkspaceArtifact[]): WorkspaceArtifact[
 export function saveWorkspace(artifacts: WorkspaceArtifact[]) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(artifacts))
+    return null
   } catch {
-    // Aeback stays usable for the current session when local storage is blocked.
+    return '本地保存失败，请导出备份'
   }
 }

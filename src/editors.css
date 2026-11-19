@@ -1,0 +1,128 @@
+/* Aeback document and data workspaces — quiet chrome, readable pages, and explicit editing states. */
+.app-header:has(.artifact-title-input) .heading-area { flex: 1; min-width: 0; }
+.app-header .artifact-title-input { width: 100%; min-width: 0; }
+.app-header .header-actions { flex-shrink: 0; }
+.app-header .primary-button, .editor-save-status { white-space: nowrap; }
+.editor-commandbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--aeback-line); }
+.editor-command-group { display: flex; align-items: center; gap: 6px; }
+.editor-commandbar .tool-button { min-height: 32px; padding: 0 9px; border-color: transparent; background: transparent; }
+.editor-commandbar .tool-button:hover { background: var(--aeback-canvas); }
+.tool-button:disabled { opacity: .35; cursor: default; }
+.editor-segmented { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-canvas); }
+.editor-segmented button { padding: 4px 12px; color: var(--aeback-subtle); border: 0; border-radius: 5px; background: transparent; font-size: 12px; cursor: pointer; }
+.editor-segmented button[aria-pressed="true"] { color: var(--aeback-ink); background: var(--aeback-surface); box-shadow: 0 1px 4px var(--aeback-shadow-soft); }
+.editor-menu { position: relative; font-size: 12px; text-align: left; }
+.editor-menu summary { display: flex; min-width: 28px; min-height: 30px; align-items: center; justify-content: center; padding: 4px 9px; color: var(--aeback-subtle); border-radius: 6px; list-style: none; cursor: pointer; }
+.editor-menu summary::-webkit-details-marker { display: none; }
+.editor-menu summary:hover, .editor-menu[open] > summary { color: var(--aeback-ink); background: var(--aeback-canvas); }
+.editor-menu summary:focus-visible { outline: 2px solid var(--aeback-focus); outline-offset: -2px; }
+.editor-menu > div { position: absolute; z-index: 8; top: calc(100% + 4px); right: 0; display: grid; min-width: 180px; padding: 5px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-surface); box-shadow: 0 8px 24px var(--aeback-shadow-strong); }
+.editor-menu button { min-height: 34px; padding: 6px 10px; color: var(--aeback-ink); border: 0; border-radius: 5px; background: transparent; font-size: 12px; text-align: left; white-space: nowrap; cursor: pointer; }
+.editor-menu button:hover { background: var(--aeback-canvas); }
+.editor-menu button:disabled { color: var(--aeback-muted); cursor: default; }
+.editor-statusbar { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; border-top: 1px solid var(--aeback-line); color: var(--aeback-subtle); font-size: 11px; }
+.editor-statusbar > div { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.editor-statusbar button { color: var(--aeback-subtle); border: 0; background: transparent; font-size: 11px; cursor: pointer; }
+.editor-statusbar button:disabled { opacity: .35; cursor: default; }
+.editor-save-status { color: var(--aeback-muted); font-size: 11px; }
+.editor-save-status--error { color: var(--aeback-danger); }
+.document-formatbar { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; min-height: 44px; padding: 5px 16px; border-bottom: 1px solid var(--aeback-line); }
+.document-formatbar button { min-width: 32px; height: 30px; display: grid; place-items: center; padding: 0 7px; color: var(--aeback-subtle); border: 0; border-radius: 5px; background: transparent; font-size: 13px; cursor: pointer; }
+.document-formatbar button:hover { color: var(--aeback-ink); background: var(--aeback-canvas); }
+.document-formatbar > span { height: 18px; width: 1px; margin: 0 6px; background: var(--aeback-line); }
+.document-findbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--aeback-line); background: var(--aeback-canvas); }
+.document-findbar input { width: 150px; min-height: 32px; padding: 4px 8px; color: var(--aeback-ink); border: 1px solid var(--aeback-line); border-radius: 5px; background: var(--aeback-surface); font-size: 12px; }
+.document-findbar > span { min-width: 34px; color: var(--aeback-subtle); font-size: 11px; text-align: center; }
+.document-findbar .tool-button { min-height: 30px; padding: 0 6px; border: 0; background: transparent; }
+.aeback-document .document-layout { min-height: 60vh; }
+.aeback-document .document-outline { max-height: 68vh; overflow-y: auto; }
+.document-panes { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.document-panes--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.document-source, .document-rendered { width: 100%; min-width: 0; height: 68vh; min-height: 360px; overflow: auto; padding: 36px clamp(20px, 3vw, 48px); color: var(--aeback-ink); background: var(--aeback-surface); font-size: 15px; line-height: 1.9; }
+.document-source { display: block; resize: none; border: 0; border-radius: 0; outline: 0; font-family: 'SFMono-Regular', Consolas, 'Microsoft YaHei', monospace; tab-size: 2; overflow-wrap: break-word; }
+.document-source:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--aeback-line); }
+.document-panes--split .document-source { border-right: 1px solid var(--aeback-line); font-size: 13px; }
+.document-rendered { overflow-wrap: anywhere; }
+.document-rendered > :first-child { margin-top: 0; }
+.document-rendered h1 { font-size: 30px; line-height: 1.35; letter-spacing: -.03em; }
+.document-rendered h2 { font-size: 23px; line-height: 1.45; margin-top: 1.8em; }
+.document-rendered h3 { font-size: 18px; }
+.document-rendered h4, .document-rendered h5, .document-rendered h6 { font-size: 16px; }
+.document-rendered p, .document-rendered ul, .document-rendered ol { margin: 1em 0; }
+.document-rendered a { color: var(--aeback-accent); text-underline-offset: 3px; }
+.document-rendered blockquote { margin: 1.2em 0; padding: 1px 18px; border-left: 3px solid var(--aeback-brand); color: var(--aeback-subtle); }
+.document-rendered code { padding: 2px 5px; border-radius: 4px; background: var(--aeback-canvas); font-family: Consolas, monospace; font-size: .88em; }
+.document-rendered pre { padding: 16px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-canvas); overflow-x: auto; line-height: 1.6; }
+.document-rendered pre code { padding: 0; }
+.document-rendered table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 13px; }
+.document-rendered td, .document-rendered th { padding: 8px 12px; border: 1px solid var(--aeback-line); }
+.document-rendered th { background: var(--aeback-canvas); }
+.document-rendered img { max-width: 100%; height: auto; border-radius: 8px; }
+.document-rendered hr { margin: 28px 0; border: 0; border-top: 1px solid var(--aeback-line); }
+.document-rendered .contains-task-list { padding-left: 4px; list-style: none; }
+.document-rendered input[type="checkbox"] { accent-color: var(--aeback-accent); }
+.table-search { width: 180px; display: flex; align-items: center; gap: 8px; color: var(--aeback-muted); }
+.table-search input { width: 100%; min-width: 0; padding: 6px 0; color: var(--aeback-ink); border: 0; background: transparent; font-size: 12px; outline: 0; }
+.table-viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--aeback-line); }
+.table-viewbar select, .table-viewbar input, .table-import-options select { max-width: 180px; min-height: 30px; padding: 4px 8px; color: var(--aeback-ink); border: 1px solid var(--aeback-line); border-radius: 5px; background: var(--aeback-surface); font-size: 12px; }
+.table-viewbar .tool-button { min-height: 28px; padding: 0 5px; border: 0; }
+.table-viewbar > span { margin-left: auto; color: var(--aeback-muted); font-size: 11px; }
+.table-formulabar { display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-bottom: 1px solid var(--aeback-line); }
+.table-formulabar > span { min-width: 50px; padding: 0 10px; color: var(--aeback-subtle); font-family: Consolas, monospace; font-size: 12px; text-align: center; }
+.table-formulabar > span:nth-child(2) { min-width: 35px; border-left: 1px solid var(--aeback-line); color: var(--aeback-muted); }
+.table-formulabar > input { flex: 1; width: 100%; min-width: 0; height: 38px; padding: 0 8px; color: var(--aeback-ink); border: 0; background: transparent; outline: 0; font-family: Consolas, 'Microsoft YaHei', monospace; font-size: 12px; }
+.formula-help > div { width: 280px; padding: 8px 16px; color: var(--aeback-subtle); font-size: 12px; line-height: 1.7; }
+.formula-help p { margin: 5px 0; }
+.aeback-table .table-scroll { height: min(62vh, 680px); min-height: 240px; max-width: 100%; overflow: auto; }
+.aeback-table .smart-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+.aeback-table .smart-table th, .aeback-table .smart-table td { position: relative; min-width: 0; padding: 0; border: 0; border-right: 1px solid var(--aeback-line); border-bottom: 1px solid var(--aeback-line); }
+.aeback-table .smart-table thead th { position: sticky; z-index: 3; top: 0; height: 66px; background: var(--aeback-canvas); }
+.table-column-heading { display: flex; align-items: center; height: 34px; gap: 5px; padding: 0 6px; }
+.table-column-heading > span { font-family: Consolas, monospace; font-size: 10px; color: var(--aeback-muted); }
+.aeback-table .smart-table .table-column-heading input { flex: 1; min-width: 0; height: 28px; padding: 0 3px; font-size: 12px; }
+.table-column-heading button { width: 25px; height: 26px; flex: 0 0 auto; padding: 0; border: 0; background: transparent; color: var(--aeback-subtle); cursor: pointer; }
+.table-column-settings { display: flex; align-items: center; justify-content: space-between; padding-left: 16px; height: 28px; }
+.table-column-settings select { max-width: 110px; padding: 0 4px; color: var(--aeback-muted); border: 0; background: var(--aeback-canvas); font-size: 10px; cursor: pointer; }
+.table-column-settings .editor-menu summary { min-height: 24px; padding: 0 8px; }
+.aeback-table .smart-table .table-row-number { position: sticky; z-index: 2; left: 0; width: 46px; min-width: 46px; background: var(--aeback-canvas); color: var(--aeback-muted); font: 11px Consolas, monospace; text-align: center; }
+.aeback-table .smart-table thead .table-row-number { z-index: 4; }
+.table-row-number button { width: 100%; height: 40px; padding: 0; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.aeback-table .smart-table tbody td { height: 40px; color: var(--aeback-ink); font-size: 13px; outline: 0; }
+.aeback-table .smart-table td > span { display: block; width: 100%; overflow: hidden; padding: 8px 10px; white-space: nowrap; text-overflow: ellipsis; }
+.table-cell--numeric > span { text-align: right; font-variant-numeric: tabular-nums; }
+.table-cell--selected { background: var(--aeback-accent-soft); }
+.table-cell--active { box-shadow: inset 0 0 0 2px var(--aeback-accent); }
+.table-cell--error::after { content: ''; position: absolute; top: 0; right: 0; border-left: 6px solid transparent; border-top: 6px solid var(--aeback-danger); }
+.aeback-table .smart-table input.table-cell-editor { display: block; width: 100%; height: 39px; padding: 0 9px; color: var(--aeback-ink); background: var(--aeback-surface); border: 0; box-shadow: inset 0 0 0 2px var(--aeback-focus); border-radius: 0; font: 13px Consolas, 'Microsoft YaHei', monospace; }
+.aeback-table .smart-table input[type="checkbox"] { display: block; width: 16px; height: 16px; margin: auto; accent-color: var(--aeback-accent); cursor: pointer; }
+.aeback-table .smart-table tfoot td, .aeback-table .smart-table tfoot th { position: sticky; bottom: 0; z-index: 1; height: 36px; padding: 0 10px; text-align: right; background: var(--aeback-canvas); font-variant-numeric: tabular-nums; border-top: 1px solid var(--aeback-line); }
+.aeback-table .smart-table .table-row-action { width: 34px; overflow: visible; }
+.table-row-action .editor-menu > div { right: 25px; top: 0; }
+.table-empty { display: grid; place-items: center; padding: 36px 16px; color: var(--aeback-muted); font-size: 13px; }
+.table-import-options { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 16px; font-size: 12px; }
+.table-import-options label { display: flex; align-items: center; gap: 6px; }
+.table-import-options input { accent-color: var(--aeback-accent); }
+.table-import-options span { color: var(--aeback-muted); }
+.table-import-preview { max-height: 280px; overflow: auto; border: 1px solid var(--aeback-line); }
+.table-import-preview table { border-collapse: collapse; font-size: 12px; }
+.table-import-preview td { max-width: 240px; padding: 8px 12px; border: 1px solid var(--aeback-line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.table-import-dialog > p { color: var(--aeback-danger); font-size: 12px; }
+.table-import-dialog { color: var(--aeback-ink); }
+.table-import-dialog::backdrop { background: var(--aeback-overlay); backdrop-filter: blur(3px); }
+@media (max-width: 1000px) {
+  .aeback-document .document-layout--with-outline { grid-template-columns: 130px minmax(0, 1fr); }
+  .document-panes--split { grid-template-columns: minmax(0, 1fr); }
+  .document-panes--split .document-source { border-right: 0; border-bottom: 1px solid var(--aeback-line); }
+  .document-panes--split > * { height: 42vh; min-height: 260px; }
+}
+@media (max-width: 680px) {
+  .editor-commandbar { padding: 8px; gap: 8px; }
+  .editor-commandbar .tool-button { padding: 0 6px; }
+  .aeback-document .document-layout--with-outline { grid-template-columns: minmax(0, 1fr); }
+  .aeback-document .document-outline { max-height: 150px; border-right: 0; border-bottom: 1px solid var(--aeback-line); }
+  .document-source, .document-rendered { height: 60vh; padding: 24px 16px; font-size: 14px; }
+  .editor-statusbar { flex-wrap: wrap; padding: 8px 10px; font-size: 10px; }
+  .table-search { width: 130px; }
+  .table-viewbar { padding: 8px; }
+  .editor-save-status { max-width: 110px; font-size: 10px; }
+}

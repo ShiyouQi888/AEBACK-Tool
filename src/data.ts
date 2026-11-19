@@ -57,6 +57,7 @@ export const starterArtifacts: WorkspaceArtifact[] = [
     title: '阅读计划',
     updatedAt,
     columns: ['书名', '主题', '进度', '评分'],
+    columnTypes: ['text', 'text', 'text', 'number'],
     rows: [
       ['卡片笔记写作法', '写作', '完成', '5'],
       ['深度工作', '注意力', '阅读中', ''],
