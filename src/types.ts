@@ -21,7 +21,9 @@ export type MindMapCrossLink = {
   id: string
   fromId: string
   toId: string
+  fromSide?: MindMapCrossLinkSide
 }
+export type MindMapCrossLinkSide = 'up' | 'right' | 'down' | 'left'
 
 export type KnowledgeNode = {
   id: string

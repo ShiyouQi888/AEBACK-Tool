@@ -1,5 +1,5 @@
 // Aeback mind map exports — portable project, outline, SVG, PNG, and JPEG.
-import type { MindMapArtifact, MindMapCrossLink, MindMapNode, NodeColor } from '../types'
+import type { MindMapArtifact, MindMapCrossLink, MindMapCrossLinkSide, MindMapNode, NodeColor } from '../types'
 
 export type MindMapExportPosition = { x: number; y: number; depth: number }
 
@@ -29,11 +29,11 @@ function connectionAnchor(center: { x: number; y: number }, width: number, heigh
   return { x: center.x - width / 2, y: center.y }
 }
 
-function connectionPath(from: MindMapExportPosition, to: MindMapExportPosition, style: MindMapArtifact['connectionStyle'], toX: (x: number) => number, toY: (y: number) => number) {
+function connectionPath(from: MindMapExportPosition, to: MindMapExportPosition, style: MindMapArtifact['connectionStyle'], toX: (x: number) => number, toY: (y: number) => number, fixedSourceSide?: MindMapCrossLinkSide) {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
-  const sourceSide = horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up')
+  const sourceSide = fixedSourceSide ?? (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up'))
   const targetSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
   const fromSize = getMindMapNodeSize(from.depth)
   const toSize = getMindMapNodeSize(to.depth)
@@ -107,8 +107,10 @@ export function createMindMapSvg(artifact: MindMapArtifact, positions: Map<strin
   const crossLinks = (artifact.crossLinks ?? []).filter((link) => nodeById.has(link.fromId) && nodeById.has(link.toId) && positions.has(link.fromId) && positions.has(link.toId)).map((link) => {
     const from = positions.get(link.fromId)!
     const to = positions.get(link.toId)!
-    const path = connectionPath(from, to, artifact.connectionStyle ?? 'curve', toX, toY)
-    return `<path d="${path}" fill="none" stroke="#8839f2" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>`
+    const fromNode = nodeById.get(link.fromId)!
+    const color = colors[resolvedColor(fromNode, root.id, indexById.get(fromNode.id) ?? 0)].edge
+    const path = connectionPath(from, to, artifact.connectionStyle ?? 'curve', toX, toY, link.fromSide)
+    return `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>`
   }).join('\n')
   const nodes = artifact.nodes.map((node) => {
     const point = positions.get(node.id) ?? { x: 0, y: 0, depth: 1 }
@@ -213,6 +215,7 @@ export function parseMindMapProject(value: unknown): MindMapArtifact {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('工程内包含无效的跨节点连线。')
       const link = entry as Record<string, unknown>
       if (typeof link.id !== 'string' || !link.id || link.id.length > 200 || linkIds.has(link.id) || typeof link.fromId !== 'string' || typeof link.toId !== 'string' || link.fromId === link.toId || !ids.has(link.fromId) || !ids.has(link.toId)) throw new Error('工程内包含无效或重复的跨节点连线。')
+      if (link.fromSide !== undefined && !['up', 'right', 'down', 'left'].includes(String(link.fromSide))) throw new Error('工程内包含无效的跨节点连线方向。')
       const from = nodeById.get(link.fromId)!
       const to = nodeById.get(link.toId)!
       if (from.parentId === to.id || to.parentId === from.id) throw new Error('跨节点连线不能重复连接父节点与子节点。')
@@ -220,7 +223,7 @@ export function parseMindMapProject(value: unknown): MindMapArtifact {
       if (pairs.has(pair)) throw new Error('工程内包含重复的跨节点连线。')
       linkIds.add(link.id)
       pairs.add(pair)
-      crossLinks.push({ id: link.id, fromId: link.fromId, toId: link.toId })
+      crossLinks.push({ id: link.id, fromId: link.fromId, toId: link.toId, fromSide: link.fromSide as MindMapCrossLinkSide | undefined })
     }
   }
 
