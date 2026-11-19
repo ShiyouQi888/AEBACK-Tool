@@ -16,6 +16,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
   const importRef = useRef<HTMLInputElement>(null)
   const findRef = useRef<HTMLInputElement>(null)
   const [showOutline, setShowOutline] = useState(true)
+  const [activeHeading, setActiveHeading] = useState<number | null>(null)
   const [view, setView] = useState<View>('edit')
   const [findOpen, setFindOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -77,6 +78,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     selectText(lineStart, lineStart + changed.length)
   }
   const jumpTo = (offset: number) => {
+    setActiveHeading(offset)
     if (view === 'preview') previewRef.current?.querySelector(`#aeback-heading-${offset}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     else selectText(offset)
   }
@@ -154,7 +156,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     </div>}
     {findOpen && <div className="document-findbar"><input ref={findRef} aria-label="查找文字" placeholder="查找" value={query} onChange={(event) => { setQuery(event.target.value); setMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findNext(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') setFindOpen(false) }} /><span>{matches.length ? `${matchIndex < 0 ? 0 : matchIndex + 1} / ${matches.length}` : '0'}</span><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext(-1)}>上一处</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext()}>下一处</button><input aria-label="替换文字" placeholder="替换为" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(false)}>替换</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(true)}>全部替换</button><button className="tool-button" type="button" aria-label="关闭查找" onClick={() => setFindOpen(false)}><Icon name="close" size={14} /></button></div>}
     <div className={`document-layout${showOutline ? ' document-layout--with-outline' : ''}`}>
-      {showOutline && <aside className="document-outline" aria-label="文档目录"><div>大纲</div>{outline.map((item) => <button key={item.offset} type="button" title={item.title} style={{ paddingLeft: 9 + (item.depth - 1) * 12 }} onClick={() => jumpTo(item.offset)}>{item.title}</button>)}{!outline.length && <p>暂无标题</p>}</aside>}
+      {showOutline && <aside className="document-outline" aria-label="文档目录"><div>大纲</div>{outline.map((item) => <button key={item.offset} type="button" title={item.title} aria-current={activeHeading === item.offset ? 'location' : undefined} style={{ paddingLeft: 9 + Math.min(item.depth - 1, 4) * 10 }} onClick={() => jumpTo(item.offset)}>{item.title}</button>)}{!outline.length && <p>暂无标题</p>}</aside>}
       <div className={`document-panes document-panes--${view}`}>
         {view !== 'preview' && <textarea ref={editorRef} className="document-source" aria-label="文档正文" spellCheck={false} placeholder="开始书写…" value={artifact.content} onChange={(event) => { update(event.target.value, 'typing'); setMessage('') }} onSelect={(event) => { const prefix = event.currentTarget.value.slice(0, event.currentTarget.selectionStart); setCursor({ line: prefix.split('\n').length, column: prefix.length - prefix.lastIndexOf('\n') }) }} onKeyDown={(event) => { if (event.key === 'Tab') { event.preventDefault(); wrap('  ', '', '') } }} />}
         {view !== 'edit' && <div ref={previewRef} className="document-rendered" aria-label="文档预览"><MarkdownContent content={artifact.content} /></div>}

@@ -35,7 +35,11 @@
 .document-findbar > span { min-width: 34px; color: var(--aeback-subtle); font-size: 11px; text-align: center; }
 .document-findbar .tool-button { min-height: 30px; padding: 0 6px; border: 0; background: transparent; }
 .aeback-document .document-layout { min-height: 60vh; }
-.aeback-document .document-outline { max-height: 68vh; overflow-y: auto; }
+.aeback-document .document-layout--with-outline { grid-template-columns: clamp(190px, 22vw, 240px) minmax(0, 1fr); }
+.aeback-document .document-outline { min-width: 0; max-height: 68vh; overflow-x: hidden; overflow-y: auto; }
+.aeback-document .document-outline > div { position: sticky; top: -18px; z-index: 1; padding: 5px 7px; background: var(--aeback-canvas); }
+.aeback-document .document-outline button { width: 100%; min-width: 0; box-sizing: border-box; line-height: 1.35; }
+.aeback-document .document-outline button[aria-current="location"] { color: var(--aeback-ink); background: var(--aeback-accent-soft); font-weight: 600; }
 .document-panes { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .document-panes--split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .document-source, .document-rendered { width: 100%; min-width: 0; height: 68vh; min-height: 360px; overflow: auto; padding: 36px clamp(20px, 3vw, 48px); color: var(--aeback-ink); background: var(--aeback-surface); font-size: 15px; line-height: 1.9; }
@@ -110,7 +114,7 @@
 .table-import-dialog { color: var(--aeback-ink); }
 .table-import-dialog::backdrop { background: var(--aeback-overlay); backdrop-filter: blur(3px); }
 @media (max-width: 1000px) {
-  .aeback-document .document-layout--with-outline { grid-template-columns: 130px minmax(0, 1fr); }
+  .aeback-document .document-layout--with-outline { grid-template-columns: clamp(190px, 24vw, 220px) minmax(0, 1fr); }
   .document-panes--split { grid-template-columns: minmax(0, 1fr); }
   .document-panes--split .document-source { border-right: 0; border-bottom: 1px solid var(--aeback-line); }
   .document-panes--split > * { height: 42vh; min-height: 260px; }
