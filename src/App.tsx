@@ -1,22 +1,22 @@
 // Aeback personal tools — one small workspace for maps, graphs, documents, and tables.
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import ArticleImportDialog from './components/ArticleImportDialog'
 import Icon from './components/Icon'
 import KnowledgeGraphEditor from './components/KnowledgeGraphEditor'
 import MindMapEditor from './components/MindMapEditor'
 import Sidebar from './components/Sidebar'
-import ThemeToggleButton, { type ThemeMode } from './components/ThemeToggleButton'
+import ThemeToggleButton from './components/ThemeToggleButton'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { starterArtifacts } from './data'
 import { parseArticle } from './lib/article'
 import { useI18n } from './lib/i18n'
+import { useTheme } from './lib/theme'
 import { loadWorkspace, saveWorkspace } from './lib/storage'
 import { TOOL_LABELS, type ToolType, type WorkspaceArtifact, type WorkspaceView } from './types'
 
 const toolTypes: ToolType[] = ['mindmap', 'graph', 'document', 'table']
 const DocumentEditor = lazy(() => import('./components/DocumentEditor'))
 const TableEditor = lazy(() => import('./components/TableEditor'))
-const themeStorageKey = 'aeback-theme'
 const sidebarCollapsedStorageKey = 'aeback-sidebar-collapsed'
 const toolDescriptions: Record<ToolType, string> = {
   mindmap: '把复杂主题拆开，找到清晰的结构。',
@@ -59,13 +59,7 @@ function ArtifactRow({ artifact, onOpen }: { artifact: WorkspaceArtifact; onOpen
 
 function App({ initialView = 'library' }: { initialView?: WorkspaceView }) {
   const { t } = useI18n()
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    try {
-      return window.localStorage.getItem(themeStorageKey) === 'light' ? 'light' : 'dark'
-    } catch {
-      return 'dark'
-    }
-  })
+  const { theme, toggleTheme } = useTheme()
   const [artifacts, setArtifacts] = useState<WorkspaceArtifact[]>(starterArtifacts)
   const [workspaceReady, setWorkspaceReady] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -84,15 +78,6 @@ function App({ initialView = 'library' }: { initialView?: WorkspaceView }) {
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme
-    try {
-      window.localStorage.setItem(themeStorageKey, theme)
-    } catch {
-      // Keep the selected theme for this session if storage is unavailable.
-    }
-  }, [theme])
 
   useEffect(() => {
     let active = true
@@ -314,8 +299,8 @@ function App({ initialView = 'library' }: { initialView?: WorkspaceView }) {
     }
   }
 
-  if (selectedArtifact?.type === 'mindmap') return <MindMapEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('mindmap')} onDelete={deleteArtifact} theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
-  if (selectedArtifact?.type === 'graph') return <KnowledgeGraphEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('graph')} onDelete={deleteArtifact} onImportArticle={importArticle} theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
+  if (selectedArtifact?.type === 'mindmap') return <MindMapEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('mindmap')} onDelete={deleteArtifact} theme={theme} onToggleTheme={toggleTheme} />
+  if (selectedArtifact?.type === 'graph') return <KnowledgeGraphEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('graph')} onDelete={deleteArtifact} onImportArticle={importArticle} theme={theme} onToggleTheme={toggleTheme} />
 
   return (
     <div className={`aeback-app${sidebarCollapsed ? ' aeback-app--sidebar-collapsed' : ''}`}>
@@ -332,7 +317,7 @@ function App({ initialView = 'library' }: { initialView?: WorkspaceView }) {
             {!selectedArtifact && view === 'graph' && <button className="tool-button header-import" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />{t('导入文章')}</button>}
             {selectedArtifact && <button className="icon-button header-delete" type="button" aria-label={t('删除文件')} title={t('删除文件')} onClick={deleteArtifact}><Icon name="trash" size={16} /></button>}
             <LanguageSwitcher />
-            <ThemeToggleButton theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
+            <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
             <div className="create-anchor">
               <button className="primary-button" type="button" onClick={mainCreate}><Icon name="plus" size={16} />{t('新建')}</button>
               {createMenuOpen && <div className="create-menu" role="menu">{toolTypes.map((type) => <button type="button" role="menuitem" key={type} onClick={() => createArtifact(type)}><Icon name={type === 'mindmap' ? 'mindmap' : type === 'graph' ? 'network' : type} size={16} />{t(TOOL_LABELS[type])}</button>)}</div>}

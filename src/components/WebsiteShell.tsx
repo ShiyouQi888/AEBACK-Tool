@@ -2,7 +2,9 @@
 import type { AnchorHTMLAttributes, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import BrandLogo from './BrandLogo'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeToggleButton from './ThemeToggleButton'
 import { useI18n } from '../lib/i18n'
+import { useTheme } from '../lib/theme'
 
 export type SiteNavigate = (path: string) => void
 
@@ -25,6 +27,7 @@ type WebsiteShellProps = { currentPath: string; onNavigate: SiteNavigate; childr
 
 function WebsiteShell({ currentPath, onNavigate, children }: WebsiteShellProps) {
   const { t } = useI18n()
+  const { theme, toggleTheme } = useTheme()
   const year = new Date().getFullYear()
   return <div className="marketing-site">
     <header className="site-header">
@@ -39,6 +42,7 @@ function WebsiteShell({ currentPath, onNavigate, children }: WebsiteShellProps) 
       </nav>
       <div className="site-header-actions">
         <LanguageSwitcher />
+        <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
         <SiteLink className="site-button site-button--primary site-header-cta" to="/workspace" onNavigate={onNavigate}>{t('进入工作台')}</SiteLink>
       </div>
     </header>

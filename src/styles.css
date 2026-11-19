@@ -395,6 +395,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .site-nav a:hover { color: var(--aeback-ink); }
 .site-header-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .site-header .language-switcher { width: 104px; }
+.site-header .theme-toggle { width: 36px; height: 36px; }
 .site-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 18px; border: 1px solid transparent; border-radius: var(--aeback-radius-control); text-decoration: none; font-size: 14px; font-weight: 630; white-space: nowrap; transition: background 140ms ease, border-color 140ms ease, color 140ms ease; }
 .site-button--primary { color: var(--aeback-on-accent); border-color: var(--aeback-accent); background: var(--aeback-accent); box-shadow: 0 7px 20px var(--aeback-accent-glow); }
 .site-button--primary:hover { border-color: var(--aeback-accent-hover); background: var(--aeback-accent-hover); }
@@ -602,6 +603,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .site-header-actions { gap: 7px; }
   .site-header-actions { order: 2; }
   .site-header .language-switcher { width: 74px; height: 34px; padding: 0 4px; font-size: 10px; }
+  .site-header .theme-toggle { width: 34px; height: 34px; }
   .site-header-cta { min-height: 34px; padding: 0 8px; font-size: 11px; }
   .site-hero { min-height: auto; grid-template-columns: minmax(0, 1fr); gap: 25px; padding-top: 66px; padding-bottom: 62px; }
   .site-hero h1 { max-width: 520px; font-size: clamp(39px, 10vw, 56px); }

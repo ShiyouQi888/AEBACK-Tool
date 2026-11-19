@@ -8,6 +8,7 @@ import LandingPage from './components/LandingPage'
 import ToolPage, { toolPageSpecs } from './components/ToolPage'
 import ToolsPage from './components/ToolsPage'
 import { I18nProvider, useI18n } from './lib/i18n'
+import { ThemeProvider } from './lib/theme'
 import type { ToolType, WorkspaceView } from './types'
 import './styles.css'
 import './editors.css'
@@ -45,10 +46,6 @@ function AebackRoot() {
     document.title = `${title} — AEBACK`
     const metaDescription = document.querySelector<HTMLMetaElement>('meta[name="description"]')
     if (metaDescription) metaDescription.content = pageDescription
-    if (!isWorkspace) {
-      try { document.documentElement.dataset.theme = window.localStorage.getItem('aeback-theme') === 'light' ? 'light' : 'dark' }
-      catch { document.documentElement.dataset.theme = 'dark' }
-    }
   }, [isWorkspace, pathname, t, toolType])
 
   const navigate = (path: string) => {
@@ -69,6 +66,6 @@ function AebackRoot() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <I18nProvider><AebackRoot /></I18nProvider>
+    <I18nProvider><ThemeProvider><AebackRoot /></ThemeProvider></I18nProvider>
   </React.StrictMode>,
 )

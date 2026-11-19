@@ -1,7 +1,8 @@
 import Icon from './Icon'
 import { useI18n } from '../lib/i18n'
+import type { ThemeMode } from '../lib/theme'
 
-export type ThemeMode = 'dark' | 'light'
+export type { ThemeMode } from '../lib/theme'
 
 type ThemeToggleButtonProps = {
   theme: ThemeMode
