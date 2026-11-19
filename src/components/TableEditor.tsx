@@ -1,7 +1,7 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { toBlob } from 'html-to-image'
-import type { TableArtifact, TableCellColor, TableColumnType, TableRowHeight } from '../types'
+import type { TableArtifact, TableCellColor, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
 import { downloadBlob, downloadText, readTextFile } from '../lib/files'
 import { adjustCellColors, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
@@ -21,6 +21,10 @@ const cellColors: Array<{ value: TableCellColor; label: string }> = [
 ]
 const rowHeights: Array<{ value: TableRowHeight; label: string }> = [
   { value: 'compact', label: '紧凑' }, { value: 'normal', label: '标准' }, { value: 'comfortable', label: '舒适' },
+]
+const summaryOptions: Array<{ value: TableSummaryType; label: string }> = [
+  { value: 'none', label: '不显示' }, { value: 'count', label: '计数' }, { value: 'nonEmptyCount', label: '非空计数' },
+  { value: 'sum', label: '求和' }, { value: 'average', label: '平均值' }, { value: 'min', label: '最小值' }, { value: 'max', label: '最大值' },
 ]
 const imagePlaceholder = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#252630"/><path d="M34 52l15-16 11 11 9-9 17 18H34z" fill="none" stroke="#737581" stroke-width="3"/><circle cx="45" cy="29" r="5" fill="#737581"/></svg>')}`
 
@@ -91,6 +95,25 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const columnType = (index: number) => artifact.columnTypes?.[index] ?? 'text'
   const selectOptionsByColumn = useMemo(() => artifact.columns.map((_, index) => columnType(index) === 'select' ? Array.from(new Set(artifact.rows.map((row) => row[index] ?? '').filter((value) => value && !value.startsWith('=')))) : []), [artifact.columns, artifact.columnTypes, artifact.rows])
   const selectOptions = (index: number) => selectOptionsByColumn[index] ?? []
+  const summaryType = (column: number): TableSummaryType => artifact.columnSummaries?.[column] ?? (viewRows.some((row) => !results[row][column].error && typeof results[row][column].value === 'number') ? 'sum' : 'none')
+  const summaryValue = (column: number, type: TableSummaryType) => {
+    const cells = viewRows.map((row) => results[row][column])
+    if (type === 'none') return ''
+    if (type === 'count') return String(cells.filter((cell) => !cell.error && typeof cell.value === 'number').length)
+    if (type === 'nonEmptyCount') return String(cells.filter((cell) => displayCell(cell) !== '').length)
+    const numbers = cells.filter((cell) => !cell.error && typeof cell.value === 'number').map((cell) => Number(cell.value))
+    if (!numbers.length) return ''
+    if (type === 'sum') return displayCell({ value: numbers.reduce((sum, value) => sum + value, 0) })
+    if (type === 'average') return displayCell({ value: numbers.reduce((sum, value) => sum + value, 0) / numbers.length })
+    if (type === 'min') return displayCell({ value: numbers.reduce((minimum, value) => Math.min(minimum, value), numbers[0]) })
+    if (type === 'max') return displayCell({ value: numbers.reduce((maximum, value) => Math.max(maximum, value), numbers[0]) })
+    return ''
+  }
+  const setColumnSummary = (column: number, type: TableSummaryType) => {
+    const summaries = artifact.columns.map((_, index) => artifact.columnSummaries?.[index] ?? (viewRows.some((row) => !results[row][index].error && typeof results[row][index].value === 'number') ? 'sum' : 'none'))
+    summaries[column] = type
+    commit({ ...artifact, columnSummaries: summaries })
+  }
   const active = { row: Math.min(selected.row, Math.max(0, artifact.rows.length - 1)), column: Math.min(selected.column, Math.max(0, artifact.columns.length - 1)) }
   const selectedViewIndex = viewRows.indexOf(active.row)
   const anchorIndex = anchor ? viewRows.indexOf(anchor.row) : selectedViewIndex
@@ -187,16 +210,17 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const columns = [...artifact.columns]
     const types = artifact.columns.map((_, column) => columnType(column))
     const widths = axis === 'column' ? Array.from({ length: artifact.columns.length }, (_, column) => columnWidth(column)) : artifact.columnWidths
+    const summaries = artifact.columnSummaries ? artifact.columns.map((_, column) => artifact.columnSummaries?.[column] ?? 'none') : undefined
     if (axis === 'row') {
       if (action === 'insert') rows.splice(index, 0, columns.map(() => ''))
       else rows.splice(index, 1)
     } else {
-      if (action === 'insert') { columns.splice(index, 0, `列 ${columns.length + 1}`); types.splice(index, 0, 'text'); widths?.splice(index, 0, DEFAULT_COLUMN_WIDTH); rows.forEach((row) => row.splice(index, 0, '')) }
-      else { columns.splice(index, 1); types.splice(index, 1); widths?.splice(index, 1); rows.forEach((row) => row.splice(index, 1)) }
+      if (action === 'insert') { columns.splice(index, 0, `列 ${columns.length + 1}`); types.splice(index, 0, 'text'); widths?.splice(index, 0, DEFAULT_COLUMN_WIDTH); summaries?.splice(index, 0, 'none'); rows.forEach((row) => row.splice(index, 0, '')) }
+      else { columns.splice(index, 1); types.splice(index, 1); widths?.splice(index, 1); summaries?.splice(index, 1); rows.forEach((row) => row.splice(index, 1)) }
     }
     rows = rows.map((row) => row.map((value) => adjustFormulaReferences(value, axis, index, action)))
     const groupBy = axis !== 'column' || artifact.groupBy === undefined ? artifact.groupBy : action === 'delete' ? artifact.groupBy === index ? undefined : artifact.groupBy > index ? artifact.groupBy - 1 : artifact.groupBy : artifact.groupBy >= index ? artifact.groupBy + 1 : artifact.groupBy
-    commit({ ...artifact, columns, columnTypes: types, columnWidths: widths, rows, groupBy, cellColors: adjustCellColors(artifact.cellColors, axis, index, action) })
+    commit({ ...artifact, columns, columnTypes: types, columnWidths: widths, columnSummaries: summaries, rows, groupBy, cellColors: adjustCellColors(artifact.cellColors, axis, index, action) })
     setEditing(null); setAnchor(null)
     setSelected({ row: Math.min(active.row, Math.max(0, rows.length - 1)), column: Math.min(active.column, columns.length - 1) })
     if (axis === 'column') { setSort(null); setFilterColumn(-1); setFilterValue('') }
@@ -233,7 +257,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
             : translateFormulaReferences(value, target - sourceRow, active.column + column - sourceColumn)
         })
       })
-      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)), columnWidths: columns.map((_, index) => columnWidth(index)) })
+      commit({ ...artifact, columns, rows, columnTypes: columns.map((_, index) => columnType(index)), columnWidths: columns.map((_, index) => columnWidth(index)), columnSummaries: artifact.columnSummaries ? columns.map((_, index) => artifact.columnSummaries?.[index] ?? 'none') : undefined })
       setMessage(`已粘贴 ${matrix.length} 行`)
     } catch (error) { setMessage(error instanceof Error ? error.message : '粘贴失败') }
   }
@@ -273,7 +297,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const columns = importMode === 'append' ? artifact.columns : Array.from({ length: width }, (_, column) => firstHeader ? importData[0][column]?.trim() || `列 ${column + 1}` : `列 ${column + 1}`)
     const appendedRows = importMode === 'append' ? artifact.rows.length : 0
     const rows = values.map((row) => columns.map((_, column) => translateFormulaReferences(row[column] ?? '', appendedRows, 0)))
-    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))), columnWidths: importMode === 'append' ? artifact.columnWidths : undefined, cellColors: importMode === 'append' ? artifact.cellColors : undefined, groupBy: importMode === 'append' ? artifact.groupBy : undefined })
+    commit({ ...artifact, columns, rows: importMode === 'append' ? [...artifact.rows, ...rows] : rows, columnTypes: importMode === 'append' ? artifact.columnTypes : columns.map((_, column) => inferColumnType(rows.map((row) => row[column] ?? ''))), columnWidths: importMode === 'append' ? artifact.columnWidths : undefined, columnSummaries: importMode === 'append' ? artifact.columnSummaries : undefined, cellColors: importMode === 'append' ? artifact.cellColors : undefined, groupBy: importMode === 'append' ? artifact.groupBy : undefined })
     setSort(null); setQuery(''); setFilterColumn(-1); setFilterValue(''); setPage(0); setAnchor(null); setSelected({ row: 0, column: 0 }); setImportData(null)
     setMessage(`已导入 ${values.length} 行`)
   }
@@ -299,7 +323,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
         backgroundColor,
         imagePlaceholder,
         onImageErrorHandler: () => {},
-        filter: (node) => !(node instanceof HTMLElement && node.matches('.table-resize-handle, button[aria-label="添加列"], button[aria-label^="排序第"], details')),
+        filter: (node) => !(node instanceof HTMLElement && node.matches('.table-resize-handle, button[aria-label="添加列"], button[aria-label^="排序第"], details:not(.table-summary-menu), .table-summary-menu > div')),
       })
       if (!blob) throw new Error('图片生成失败')
       downloadBlob(artifact.title, format, blob)
@@ -354,9 +378,13 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
           </td>
         })}<td className="table-row-action"><details className="editor-menu"><summary aria-label={`第 ${rowIndex + 1} 行操作`}>···</summary><div><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex)}>上方插入行</button><button type="button" onClick={() => changeStructure('row', 'insert', rowIndex + 1)}>下方插入行</button><button type="button" onClick={() => changeStructure('row', 'delete', rowIndex)}>删除行</button></div></details></td></tr>
         })}</tbody>
-        <tfoot><tr><th className="table-row-number">Σ</th>{artifact.columns.map((_, column) => {
-          const numbers = viewRows.map((row) => results[row][column]).filter((cell) => !cell.error && typeof cell.value === 'number').map((cell) => Number(cell.value))
-          return <td key={column} title="当前视图数值合计">{numbers.length ? displayCell({ value: numbers.reduce((sum, value) => sum + value, 0) }) : ''}</td>
+        <tfoot><tr><th className="table-row-number" title="列汇总函数">Σ</th>{artifact.columns.map((_, column) => {
+          const summary = summaryType(column)
+          const label = summaryOptions.find((option) => option.value === summary)?.label ?? '汇总'
+          const value = summaryValue(column, summary)
+          return <td key={column} title={`${columnName(column)} · ${label}`}><details className="editor-menu table-summary-menu"><summary aria-label={`第 ${column + 1} 列汇总：${label}`} title={`设置${columnName(column)}列汇总函数`}>
+            {summary === 'none' ? <span className="table-summary-empty">＋ 汇总</span> : <><span className="table-summary-label">{label}</span><strong>{value}</strong></>}
+          </summary><div>{summaryOptions.map((option) => <button key={option.value} type="button" aria-pressed={summary === option.value} onClick={(event) => { setColumnSummary(column, option.value); event.currentTarget.closest('details')?.removeAttribute('open') }}>{option.label}</button>)}</div></details></td>
         })}<td /></tr></tfoot>
       </table>
       {artifact.columns.map((_, column) => columnType(column) === 'select' ? <datalist key={column} id={`aeback-${artifact.id}-select-${column}`}>{selectOptions(column).map((option) => <option value={option} key={option} />)}</datalist> : null)}

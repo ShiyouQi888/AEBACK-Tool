@@ -72,12 +72,14 @@ export type TableArtifact = ArtifactBase & {
   rows: string[][]
   columnTypes?: TableColumnType[]
   columnWidths?: number[]
+  columnSummaries?: TableSummaryType[]
   groupBy?: number
   rowHeight?: TableRowHeight
   cellColors?: Record<string, TableCellColor>
 }
 
 export type TableColumnType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'image'
+export type TableSummaryType = 'none' | 'count' | 'nonEmptyCount' | 'sum' | 'average' | 'min' | 'max'
 export type TableRowHeight = 'compact' | 'normal' | 'comfortable'
 export type TableCellColor = 'purple' | 'blue' | 'green' | 'yellow' | 'orange' | 'red'
 
