@@ -10,6 +10,7 @@ export type MindMapNode = {
   id: string
   text: string
   parentId: string | null
+  parentSide?: MindMapCrossLinkSide
   x?: number
   y?: number
   color?: NodeColor

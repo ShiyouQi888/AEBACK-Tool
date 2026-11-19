@@ -65,17 +65,25 @@ function getPathBetweenPoints(start: { x: number; y: number }, end: { x: number;
       : `M ${start.x} ${start.y} C ${start.x} ${start.y + edgeDy * 0.42} ${end.x} ${end.y - edgeDy * 0.42} ${end.x} ${end.y}`
 }
 
-function getConnectionPath(from: { x: number; y: number; depth: number }, to: { x: number; y: number; depth: number }, style: MindMapLineStyle, sourceSide?: MindMapSide) {
+function getConnectionPath(from: { x: number; y: number; depth: number }, to: { x: number; y: number; depth: number }, style: MindMapLineStyle, sourceSide?: MindMapSide, fixedBranch = false) {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
   const connectionSourceSide: MindMapSide = sourceSide ?? (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up'))
-  const targetSide: MindMapSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
+  const oppositeSide: Record<MindMapSide, MindMapSide> = { up: 'down', right: 'left', down: 'up', left: 'right' }
+  const targetSide: MindMapSide = fixedBranch ? oppositeSide[connectionSourceSide] : horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
   const fromSize = getMindMapNodeSize(from.depth)
   const toSize = getMindMapNodeSize(to.depth)
   const start = getMindMapConnectionAnchor(from, fromSize.width, fromSize.height, connectionSourceSide)
   const end = getMindMapConnectionAnchor(to, toSize.width, toSize.height, targetSide)
   return getPathBetweenPoints(start, end, style)
+}
+
+function layoutBranchSide(direction: MindMapDirection): MindMapSide | undefined {
+  if (direction === 'right') return 'right'
+  if (direction === 'left') return 'left'
+  if (direction === 'down') return 'down'
+  return undefined
 }
 
 function createId() {
@@ -341,6 +349,19 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
           : { x: 0, y: gapY }
     let x = parentPosition.x + offset.x
     let y = parentPosition.y + offset.y
+    const sideSiblings = artifact.nodes.filter((node) => {
+      if (node.parentId !== parentId) return false
+      const nodePosition = positionFor(node)
+      const dx = nodePosition.x - parentPosition.x
+      const dy = nodePosition.y - parentPosition.y
+      const inferredSide = node.parentSide ?? (direction !== 'radial' ? layoutBranchSide(direction) : Math.abs(dx) >= Math.abs(dy) * .55 ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up'))
+      return inferredSide === side
+    }).map(positionFor)
+    if (side === 'right' || side === 'left') {
+      if (sideSiblings.length) y = Math.max(parentPosition.y, ...sideSiblings.map((position) => position.y)) + gapY
+    } else if (sideSiblings.length) {
+      x = Math.max(parentPosition.x, ...sideSiblings.map((position) => position.x)) + gapX
+    }
     const nodeDepth = parentPosition.depth + 1
     const nodeSize = getMindMapNodeSize(nodeDepth)
     const halfWidth = nodeSize.width / 2
@@ -356,16 +377,19 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
         && candidateY + halfHeight > position.y - existingHalfHeight - 14
     })
     for (let attempt = 0; hasCollision(x, y) && attempt < artifact.nodes.length + 10; attempt += 1) {
-      x += offset.x === 0 ? 0 : Math.sign(offset.x) * gapX
-      y += offset.y === 0 ? 0 : Math.sign(offset.y) * gapY
+      if (side === 'right' || side === 'left') y += gapY
+      else x += gapX
     }
+    const rootChildren = artifact.nodes.filter((node) => node.parentId === root.id).length
+    const parentColor = defaultColor(parent, root.id, artifact.nodes.indexOf(parent))
     const node: MindMapNode = {
       id: createId(),
       text: '新节点',
       parentId,
+      parentSide: side,
       x,
       y,
-      color: palette[artifact.nodes.length % palette.length]?.value ?? 'blue',
+      color: parentId === root.id ? palette[rootChildren % palette.length]?.value ?? 'blue' : parentColor,
     }
     const nextNodes = [...artifact.nodes.map((existing) => existing.id === parentId ? { ...existing, collapsed: false } : existing), node]
     commitChange({ ...artifact, nodes: nextNodes })
@@ -627,14 +651,14 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     commitChange({
       ...artifact,
       direction: nextDirection,
-      nodes: artifact.nodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}) })),
+      nodes: artifact.nodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}), parentSide: node.id === root.id ? undefined : layoutBranchSide(nextDirection) })),
     })
     fitLayout(artifact.nodes, nextLayout)
   }
 
   const arrangeNodes = () => {
     const nextLayout = getLayout(artifact.nodes, direction, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
-    const nextNodes = artifact.nodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}) }))
+    const nextNodes = artifact.nodes.map((node) => ({ ...node, ...(nextLayout.get(node.id) ?? {}), parentSide: node.id === root.id ? undefined : layoutBranchSide(direction) }))
     commitChange({ ...artifact, nodes: nextNodes })
     fitLayout(nextNodes, nextLayout)
   }
@@ -649,7 +673,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     const collectDescendants = (id: string) => artifact.nodes.filter((node) => node.parentId === id).forEach((node) => { descendants.add(node.id); collectDescendants(node.id) })
     collectDescendants(selected.id)
     if (parentId === selected.id || descendants.has(parentId)) return
-    const nextNodes = artifact.nodes.map((node) => node.id === selected.id ? { ...node, parentId, x: undefined, y: undefined } : node.id === parentId ? { ...node, collapsed: false } : node)
+    const nextNodes = artifact.nodes.map((node) => node.id === selected.id ? { ...node, parentId, parentSide: layoutBranchSide(direction), x: undefined, y: undefined } : node.id === parentId ? { ...node, collapsed: false } : node)
     const crossLinks = (artifact.crossLinks ?? []).filter((link) => !((link.fromId === selected.id && link.toId === parentId) || (link.fromId === parentId && link.toId === selected.id)))
     if (selectedCrossLink && !crossLinks.some((link) => link.id === selectedCrossLink.id)) setSelectedCrossLinkId(null)
     const nextLayout = getLayout(nextNodes, direction, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
@@ -805,7 +829,8 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const fromNode = artifact.nodes.find((item) => item.id === node.parentId)!
             const from = positionFor(fromNode)
             const to = positionFor(node)
-            return <path key={`edge-${node.id}`} className={`mindmap-connection mindmap-connection--${connectionStyle} mindmap-connection--${defaultColor(node, root.id, artifact.nodes.indexOf(node))}`} d={getConnectionPath(from, to, connectionStyle)} />
+            const branchSide = node.parentSide ?? layoutBranchSide(direction)
+            return <path key={`edge-${node.id}`} className={`mindmap-connection mindmap-connection--${connectionStyle} mindmap-connection--${defaultColor(node, root.id, artifact.nodes.indexOf(node))}`} d={getConnectionPath(from, to, connectionStyle, branchSide, true)} />
           })}
           {(artifact.crossLinks ?? []).filter((link) => visibleNodeIds.has(link.fromId) && visibleNodeIds.has(link.toId)).map((link) => {
             const fromNode = artifact.nodes.find((node) => node.id === link.fromId)

@@ -29,12 +29,13 @@ function connectionAnchor(center: { x: number; y: number }, width: number, heigh
   return { x: center.x - width / 2, y: center.y }
 }
 
-function connectionPath(from: MindMapExportPosition, to: MindMapExportPosition, style: MindMapArtifact['connectionStyle'], toX: (x: number) => number, toY: (y: number) => number, fixedSourceSide?: MindMapCrossLinkSide) {
+function connectionPath(from: MindMapExportPosition, to: MindMapExportPosition, style: MindMapArtifact['connectionStyle'], toX: (x: number) => number, toY: (y: number) => number, fixedSourceSide?: MindMapCrossLinkSide, fixedBranch = false) {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
   const sourceSide = fixedSourceSide ?? (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up'))
-  const targetSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
+  const oppositeSide: Record<MindMapCrossLinkSide, MindMapCrossLinkSide> = { up: 'down', right: 'left', down: 'up', left: 'right' }
+  const targetSide = fixedBranch ? oppositeSide[sourceSide] : horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
   const fromSize = getMindMapNodeSize(from.depth)
   const toSize = getMindMapNodeSize(to.depth)
   const start = connectionAnchor(from, fromSize.width, fromSize.height, sourceSide)
@@ -100,7 +101,8 @@ export function createMindMapSvg(artifact: MindMapArtifact, positions: Map<strin
     const parent = artifact.nodes.find((item) => item.id === node.parentId)!
     const from = positions.get(parent.id)!
     const to = positions.get(node.id)!
-    const path = connectionPath(from, to, artifact.connectionStyle ?? 'curve', toX, toY)
+    const layoutSide: MindMapCrossLinkSide | undefined = artifact.direction === 'right' ? 'right' : artifact.direction === 'left' ? 'left' : artifact.direction === 'down' ? 'down' : undefined
+    const path = connectionPath(from, to, artifact.connectionStyle ?? 'curve', toX, toY, node.parentSide ?? layoutSide, true)
     const palette = colors[resolvedColor(node, root.id, indexById.get(node.id) ?? 0)]
     return `<path d="${path}" fill="none" stroke="${palette.edge}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>`
   }).join('\n')
@@ -180,6 +182,7 @@ export function parseMindMapProject(value: unknown): MindMapArtifact {
     const node = entry as Record<string, unknown>
     if (typeof node.id !== 'string' || !node.id || node.id.length > 200 || ids.has(node.id) || typeof node.text !== 'string' || node.text.length > 4_000 || !(node.parentId === null || typeof node.parentId === 'string')) throw new Error('工程内包含无效或重复的节点。')
     if ((node.x !== undefined && (typeof node.x !== 'number' || !Number.isFinite(node.x))) || (node.y !== undefined && (typeof node.y !== 'number' || !Number.isFinite(node.y)))) throw new Error('工程内包含无效的节点坐标。')
+    if (node.parentSide !== undefined && !['up', 'right', 'down', 'left'].includes(String(node.parentSide))) throw new Error('工程内包含无效的父级连接方向。')
     if (node.color !== undefined && (typeof node.color !== 'string' || !colorNames.includes(node.color as NodeColor))) throw new Error('工程内包含不支持的节点颜色。')
     if (node.opacity !== undefined && (typeof node.opacity !== 'number' || !Number.isFinite(node.opacity) || node.opacity < 0 || node.opacity > 100)) throw new Error('工程内包含无效的透明度。')
     if (node.collapsed !== undefined && typeof node.collapsed !== 'boolean') throw new Error('工程内包含无效的分支状态。')
