@@ -40,7 +40,7 @@ function kindFor(node: KnowledgeNode, rootId: string): KnowledgeNodeKind {
 }
 
 function halfSize(node: KnowledgeNode, rootId: string, depths: Map<string, number>) {
-  return node.id === rootId ? 64 : 64 / (1 + 0.075 * Math.max(1, depths.get(node.id) ?? 1))
+  return node.id === rootId ? 70 : 54 / (1 + 0.1 * (Math.max(1, depths.get(node.id) ?? 1) - 1))
 }
 
 function nodeLabel(text: string, radius: number, fontSize: number) {
@@ -96,10 +96,10 @@ export function createGraphSvg(artifact: GraphArtifact, positions: Map<string, G
     const color = colors[colorFor(node, root.id, index)]
     const opacity = Math.max(0, Math.min(100, node.opacity ?? 100)) / 100
     const kind = kindLabels[kindFor(node, root.id)]
-    const titleFontSize = Math.max(7, 12 * radius / 64)
-    const kindFontSize = Math.max(6, 9 * radius / 64)
+    const titleFontSize = Math.max(7, 12 * radius / 70)
+    const kindFontSize = Math.max(6, 9 * radius / 70)
     const description = node.description ? `<desc>${escapeXml(node.description)}</desc>` : ''
-    return `<g><title>${escapeXml(node.text)}</title>${description}<circle cx="${toX(point.x)}" cy="${toY(point.y)}" r="${radius}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="1.5"/><text x="${toX(point.x)}" y="${toY(point.y) - 2}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${titleFontSize}" font-weight="620">${escapeXml(nodeLabel(node.text, radius, titleFontSize))}</text><text x="${toX(point.x)}" y="${toY(point.y) + titleFontSize * 1.42}" text-anchor="middle" fill="#424957" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${kindFontSize}" font-weight="570">${kind}</text></g>`
+    return `<g><title>${escapeXml(node.text)}</title>${description}<circle cx="${toX(point.x)}" cy="${toY(point.y)}" r="${radius}" fill="${color.fill}" fill-opacity="${opacity}" stroke="${color.stroke}" stroke-width="${node.id === root.id ? 2.2 : 1.4}"/><text x="${toX(point.x)}" y="${toY(point.y) - 2}" text-anchor="middle" fill="#303846" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${titleFontSize}" font-weight="${node.id === root.id ? 650 : 620}">${escapeXml(nodeLabel(node.text, radius, titleFontSize))}</text><text x="${toX(point.x)}" y="${toY(point.y) + titleFontSize * 1.42}" text-anchor="middle" fill="#424957" font-family="Inter, Microsoft YaHei, sans-serif" font-size="${kindFontSize}" font-weight="570">${kind}</text></g>`
   }).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- AEBACK knowledge graph export -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="title description"><title id="title">${escapeXml(artifact.title)} · AEBACK</title><desc id="description">AEBACK knowledge graph with ${artifact.nodes.length} nodes and ${artifact.edges.length} relationships.</desc><defs><marker id="aeback-graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#8993a2"/></marker></defs><rect width="100%" height="100%" fill="#ffffff"/><g>${edges}\n${nodes}</g><text x="${width - padding}" y="${height - 18}" text-anchor="end" fill="#9aa1ac" font-family="Inter, Microsoft YaHei, sans-serif" font-size="10" letter-spacing="1.5">AEBACK</text></svg>`
 }

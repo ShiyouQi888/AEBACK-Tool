@@ -91,12 +91,12 @@ function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: Knowledge
 }
 
 function getNodeHalfSize(node: KnowledgeNode, rootId: string, depth = 1) {
-  const radius = node.id === rootId ? 64 : getGraphRadius(depth)
+  const radius = node.id === rootId ? 70 : getGraphRadius(depth)
   return { width: radius, height: radius }
 }
 
 function getGraphRadius(depth: number) {
-  return 64 / (1 + 0.075 * Math.max(1, depth))
+  return 54 / (1 + 0.1 * (Math.max(1, depth) - 1))
 }
 
 function getEdgePoint(node: KnowledgeNode, center: { x: number; y: number }, toward: { x: number; y: number }, rootId: string, depth: number) {
@@ -399,14 +399,14 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const dimmed = Boolean(searchQuery.trim() && !matchesSearch(node))
             const depth = graphDepths.get(node.id) ?? 1
             const half = getNodeHalfSize(node, rootNode.id, depth)
-            const titleFontSize = Math.max(7, 12 * half.width / 64)
-            const kindFontSize = Math.max(6, 9 * half.width / 64)
+            const titleFontSize = Math.max(7, 12 * half.width / 70)
+            const kindFontSize = Math.max(6, 9 * half.width / 70)
             const maxLabelChars = Math.max(3, Math.floor(half.width * 1.75 / titleFontSize))
             const sidePoints: Record<KnowledgeSide, { x: number; y: number }> = { up: { x: 0, y: -half.height }, right: { x: half.width, y: 0 }, down: { x: 0, y: half.height }, left: { x: -half.width, y: 0 } }
             return <g key={node.id} id={`knowledge-node-${node.id}`} className={`canvas-node knowledge-node${active ? ' canvas-node--selected' : ''}${dimmed ? ' knowledge-node--dimmed' : ''}${searchQuery.trim() && !dimmed ? ' knowledge-node--match' : ''}`} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} aria-label={`编辑${kindLabels[nodeKind]}节点：${node.text}`} onPointerDown={(event: PointerEvent<SVGGElement>) => { setSelectedId(node.id); setSelectedEdgeId(''); canvas.startNodeDrag(node.id, position.x, position.y, event) }} onKeyDown={(event) => selectWithKey(event, node)}>
               <title>{node.text}</title>
               <circle className="knowledge-node-halo" r={half.width + 9} />
-              <circle className={`knowledge-node-shape ${central ? 'knowledge-node-shape--root' : 'knowledge-node-shape--leaf'}`} r={half.width} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
+            <circle className={`knowledge-node-shape ${central ? 'knowledge-node-shape--root' : 'knowledge-node-shape--leaf'}`} r={half.width} data-color={color} style={{ fillOpacity: Math.max(0, Math.min(100, node.opacity ?? 100)) / 100 }} />
               <text className="canvas-node-label knowledge-node-title" x="0" y="-2" textAnchor="middle" style={{ fontSize: titleFontSize }}>{node.text.length > maxLabelChars ? `${node.text.slice(0, maxLabelChars - 1)}…` : node.text}</text>
               <text className="knowledge-node-kind" x="0" y={titleFontSize * 1.42} textAnchor="middle" style={{ fontSize: kindFontSize }}>{kindLabels[nodeKind]}</text>
               {(['up', 'right', 'down', 'left'] as KnowledgeSide[]).map((side) => <g key={side} className="knowledge-add-handle" transform={`translate(${sidePoints[side].x} ${sidePoints[side].y})`} role="button" tabIndex={active ? 0 : -1} aria-label={`在节点${sideLabels[side]}添加关联节点`} onPointerDown={(event) => { event.stopPropagation(); setSelectedId(node.id) }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); addDirectionalNode(node.id, side) } }}><circle r="10" /><path d="M -3.5 0 H 3.5 M 0 -3.5 V 3.5" /></g>)}

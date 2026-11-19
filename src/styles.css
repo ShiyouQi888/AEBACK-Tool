@@ -552,6 +552,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .knowledge-node-title { font-size: 12px; font-weight: 620; }
 .knowledge-node-kind { fill: #424957; font-family: inherit; font-size: 9px; font-weight: 570; pointer-events: none; user-select: none; }
 .knowledge-node-shape { stroke-width: 1.4; }
+.knowledge-node-shape--root { stroke-width: 2.2; }
 .knowledge-node--selected .knowledge-node-halo { fill: rgba(255, 74, 11, .10); stroke: rgba(255, 74, 11, .28); }
 .knowledge-node--selected .knowledge-node-shape { stroke: var(--aeback-accent); stroke-width: 2.6; filter: drop-shadow(0 0 7px rgba(255, 74, 11, .22)); }
 .knowledge-node:focus-visible .knowledge-node-shape { stroke: var(--aeback-focus); stroke-width: 2.6; }
@@ -614,6 +615,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .canvas-export-dropdown button:hover, .canvas-export-dropdown button:focus-visible { outline: 0; background: var(--aeback-canvas); }
 .canvas-export-divider { height: 1px; margin: 3px 5px; background: var(--aeback-line); }
 .canvas-export-status { position: absolute; z-index: 5; top: 74px; right: 18px; max-width: min(360px, calc(100vw - 36px)); padding: 8px 11px; color: var(--aeback-ink); border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-surface); box-shadow: 0 4px 14px var(--aeback-shadow-medium); font-size: 12px; }
+.mindmap-node--root .canvas-node-shape { stroke-width: 2; }
+.mindmap-node--root.mindmap-node--selected .canvas-node-shape { stroke-width: 2.8; }
 
 @media (max-width: 680px) {
   .canvas-export-dropdown { width: min(208px, calc(100vw - 24px)); }
