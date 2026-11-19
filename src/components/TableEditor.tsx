@@ -1,5 +1,6 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { toBlob } from 'html-to-image'
 import type { TableArtifact, TableCellAlignment, TableCellBorderStyle, TableCellColor, TableCellFormatting, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
@@ -66,6 +67,48 @@ function TableImageCell({ source }: { source: string }) {
   return failed ? <span className="table-image-fallback" title={source}>{t('图片不可用')}</span> : <img className="table-image-preview" src={source} alt={t('表格图片')} title={source} loading="lazy" onError={() => setFailed(true)} />
 }
 
+function TableSummaryPopover({ anchor, active, onSelect, onClose }: { anchor: HTMLButtonElement; active: TableSummaryType; onSelect: (summary: TableSummaryType) => void; onClose: () => void }) {
+  const { t } = useI18n()
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      const menu = menuRef.current
+      if (!menu || !anchor.isConnected) { onClose(); return }
+      const anchorRect = anchor.getBoundingClientRect()
+      const menuRect = menu.getBoundingClientRect()
+      if (anchorRect.right < 0 || anchorRect.left > window.innerWidth || anchorRect.bottom < 0 || anchorRect.top > window.innerHeight) { onClose(); return }
+      const left = Math.max(8, Math.min(anchorRect.right - menuRect.width, window.innerWidth - menuRect.width - 8))
+      const top = anchorRect.top >= menuRect.height + 8
+        ? anchorRect.top - menuRect.height - 6
+        : Math.min(window.innerHeight - menuRect.height - 8, anchorRect.bottom + 6)
+      setPosition({ top: Math.max(8, top), left })
+    }
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && (menuRef.current?.contains(target) || anchor.contains(target))) return
+      onClose()
+    }
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [anchor, onClose])
+
+  return createPortal(<div ref={menuRef} className="table-summary-popover" role="menu" style={{ top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}>
+    {summaryOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={active === option.value} onClick={() => onSelect(option.value)}>{t(option.label)}</button>)}
+  </div>, document.body)
+}
+
 function TableEditor({ artifact, onChange }: TableEditorProps) {
   const { t, locale } = useI18n()
   const history = useArtifactHistory(artifact, onChange)
@@ -90,6 +133,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const [importData, setImportData] = useState<string[][] | null>(null)
   const [firstHeader, setFirstHeader] = useState(true)
   const [importMode, setImportMode] = useState('replace')
+  const [summaryMenu, setSummaryMenu] = useState<{ column: number; anchor: HTMLButtonElement } | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const [resizingColumnWidths, setResizingColumnWidths] = useState<number[] | null>(null)
   const resizeRef = useRef<{ column: number; startX: number; startWidth: number; pointerId: number } | null>(null)
@@ -155,6 +199,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     if (type === 'max') return displayCell({ value: numbers.reduce((maximum, value) => Math.max(maximum, value), numbers[0]) })
     return ''
   }
+  const closeSummaryMenu = useCallback(() => setSummaryMenu(null), [])
   const setColumnSummary = (column: number, type: TableSummaryType) => {
     const summaries = artifact.columns.map((_, index) => artifact.columnSummaries?.[index] ?? (viewRows.some((row) => !results[row][index].error && typeof results[row][index].value === 'number') ? 'sum' : 'none'))
     summaries[column] = type
@@ -330,7 +375,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const width = resizingColumnWidths?.[index] ?? artifact.columnWidths?.[index] ?? DEFAULT_COLUMN_WIDTH
     return Number.isFinite(width) ? Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width)) : DEFAULT_COLUMN_WIDTH
   }
-  const beginColumnResize = (event: PointerEvent<HTMLButtonElement>, column: number) => {
+  const beginColumnResize = (event: ReactPointerEvent<HTMLButtonElement>, column: number) => {
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
@@ -339,13 +384,13 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     setResizingColumnWidths(Array.from({ length: artifact.columns.length }, (_, index) => columnWidth(index)))
     event.currentTarget.setPointerCapture(event.pointerId)
   }
-  const updateColumnResize = (event: PointerEvent<HTMLButtonElement>) => {
+  const updateColumnResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const resize = resizeRef.current
     if (!resize || resize.pointerId !== event.pointerId) return
     const width = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, resize.startWidth + event.clientX - resize.startX))
     setResizingColumnWidths((current) => { const next = [...(current ?? artifact.columns.map((_, index) => columnWidth(index)))]; next[resize.column] = width; return next })
   }
-  const finishColumnResize = (event: PointerEvent<HTMLButtonElement>) => {
+  const finishColumnResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const resize = resizeRef.current
     if (!resize || resize.pointerId !== event.pointerId) return
     const width = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, resize.startWidth + event.clientX - resize.startX))
@@ -439,7 +484,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
     const column = Math.max(0, Math.min(artifact.columns.length - 1, active.column + deltaColumn))
     focus({ row: viewRows[index] ?? active.row, column }, extend)
   }
-  const onGridKey = (event: KeyboardEvent<HTMLDivElement>) => {
+  const onGridKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLButtonElement) return
     if (event.ctrlKey || event.metaKey) {
       if (event.key.toLowerCase() === 'a') { event.preventDefault(); selectAllCells() }
@@ -496,7 +541,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
         backgroundColor,
         imagePlaceholder,
         onImageErrorHandler: () => {},
-        filter: (node) => !(node instanceof HTMLElement && node.matches('.table-resize-handle, .table-actions-head button, .table-column-heading button, details:not(.table-summary-menu), .table-summary-menu > div')),
+        filter: (node) => !(node instanceof HTMLElement && node.matches('.table-resize-handle, .table-actions-head button, .table-column-heading button, details')),
       })
       if (!blob) throw new Error(t('图片生成失败'))
       downloadBlob(artifact.title, format, blob)
@@ -568,9 +613,9 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
           const summary = summaryType(column)
           const label = t(summaryOptions.find((option) => option.value === summary)?.label ?? '汇总')
           const value = summaryValue(column, summary)
-          return <td key={column} title={`${columnName(column)} · ${label}`}><details className="editor-menu table-summary-menu"><summary aria-label={t('第 {column} 列汇总：{summary}', { column: column + 1, summary: label })} title={t('设置{column}列汇总函数', { column: columnName(column) })}>
+          return <td key={column} title={`${columnName(column)} · ${label}`}><button className="table-summary-trigger" type="button" aria-haspopup="menu" aria-expanded={summaryMenu?.column === column} aria-label={t('第 {column} 列汇总：{summary}', { column: column + 1, summary: label })} title={t('设置{column}列汇总函数', { column: columnName(column) })} onClick={(event) => setSummaryMenu((current) => current?.column === column ? null : { column, anchor: event.currentTarget })}>
             {summary === 'none' ? <span className="table-summary-empty">＋ {t('汇总')}</span> : <><span className="table-summary-label">{label}</span><strong>{value}</strong></>}
-          </summary><div>{summaryOptions.map((option) => <button key={option.value} type="button" aria-pressed={summary === option.value} onClick={(event) => { setColumnSummary(column, option.value); event.currentTarget.closest('details')?.removeAttribute('open') }}>{t(option.label)}</button>)}</div></details></td>
+          </button></td>
         })}<td /></tr></tfoot>
       </table>
       {artifact.columns.map((_, column) => columnType(column) === 'select' ? <datalist key={column} id={`aeback-${artifact.id}-select-${column}`}>{selectOptions(column).map((option) => <option value={option} key={option} />)}</datalist> : null)}
@@ -583,6 +628,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
       catch (error) { setMessage(error instanceof Error ? t(error.message) : t('导入失败')) }
     }} />
     {importData && <TableImportDialog rows={importData} firstHeader={firstHeader} mode={importMode} message={message} onHeaderChange={setFirstHeader} onModeChange={setImportMode} onConfirm={importTable} onClose={() => setImportData(null)} />}
+    {summaryMenu && <TableSummaryPopover anchor={summaryMenu.anchor} active={summaryType(summaryMenu.column)} onSelect={(summary) => { setColumnSummary(summaryMenu.column, summary); closeSummaryMenu() }} onClose={closeSummaryMenu} />}
   </section>
 }
 
