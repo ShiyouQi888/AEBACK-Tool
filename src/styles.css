@@ -100,7 +100,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 4; width: 232px; display: flex; flex-direction: column; padding: 22px 13px 14px; border-right: 1px solid var(--aeback-line); background: var(--aeback-sidebar); }
 .sidebar-header { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 28px; padding: 0 5px; }
 .brand-lockup { min-width: 0; display: flex; align-items: center; margin: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.aeback-brand-image { width: 144px; height: 32px; display: block; object-fit: contain; }
+.aeback-brand-image { width: 144px; height: 32px; display: block; object-fit: cover; object-position: center; }
 .aeback-brand-image--compact { width: 31px; height: 31px; }
 .aeback-icon { display: block; flex: 0 0 auto; }
 .sidebar-toggle { width: 32px; height: 32px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; color: var(--aeback-subtle); border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; transition: color 130ms ease, background 130ms ease, border-color 130ms ease; }
