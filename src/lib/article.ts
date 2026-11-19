@@ -1,5 +1,5 @@
 // Aeback local article parser — preserves heading/list hierarchy and evidence as graph nodes.
-import type { GraphArtifact, KnowledgeEdge, KnowledgeNode } from '../types'
+import type { GraphArtifact, KnowledgeEdge, KnowledgeNode, NodeColor } from '../types'
 
 function concise(text: string, limit = 34) {
   const normalized = text.replace(/^#+\s*/, '').replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, '').replace(/\*\*|__|`/g, '').trim()
@@ -13,7 +13,10 @@ function makeId() {
 export function parseArticle(title: string, text: string): GraphArtifact {
   const rootId = makeId()
   const articleTitle = title.trim() || '文章知识图谱'
-  const nodes: KnowledgeNode[] = [{ id: rootId, text: articleTitle, kind: 'article', source: articleTitle }]
+  const branchColors: NodeColor[] = ['blue', 'violet', 'amber', 'coral', 'slate', 'green']
+  const colorByNode = new Map<string, NodeColor>([[rootId, 'green']])
+  let nextBranchColor = 0
+  const nodes: KnowledgeNode[] = [{ id: rootId, text: articleTitle, kind: 'article', source: articleTitle, color: 'green' }]
   const edges: KnowledgeEdge[] = []
   const headingStack: Array<{ level: number; id: string }> = [{ level: 0, id: rootId }]
   const listStack: Array<{ indent: number; id: string }> = []
@@ -41,7 +44,9 @@ export function parseArticle(title: string, text: string): GraphArtifact {
     }
     if (nodes.length >= maxNodes) return undefined
     const id = makeId()
-    nodes.push({ id, text: label, kind, source: cleanText.slice(0, 240) })
+    const color = parentId === rootId ? branchColors[nextBranchColor++ % branchColors.length] : colorByNode.get(parentId) ?? 'blue'
+    nodes.push({ id, text: label, kind, source: cleanText.slice(0, 240), color })
+    colorByNode.set(id, color)
     nodeByText.set(key, id)
     addEdge(parentId, id, relation)
     return id

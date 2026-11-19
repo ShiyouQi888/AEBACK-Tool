@@ -46,7 +46,40 @@ function createId() {
   return `knowledge-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`
 }
 
-function getGraphDepths(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[]) {
+const articleHierarchyRelations = new Set(['章节', '包含', '要点'])
+
+function getArticleHierarchy(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[]) {
+  const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
+  const depths = new Map<string, number>()
+  const children = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  if (!root) return { depths, children }
+  const outgoing = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  edges.forEach((edge) => {
+    if (articleHierarchyRelations.has(edge.label ?? '') && outgoing.has(edge.fromId) && outgoing.has(edge.toId)) outgoing.get(edge.fromId)?.push(edge.toId)
+  })
+  depths.set(root.id, 0)
+  const queue = [root.id]
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const parentId = queue[cursor]
+    for (const childId of outgoing.get(parentId) ?? []) {
+      if (depths.has(childId)) continue
+      depths.set(childId, (depths.get(parentId) ?? 0) + 1)
+      children.get(parentId)?.push(childId)
+      queue.push(childId)
+    }
+  }
+  // Keep orphan nodes in a nearby source branch, while leaving links between known nodes as cross-links.
+  nodes.forEach((node) => {
+    if (depths.has(node.id)) return
+    const parentId = edges.find((edge) => edge.toId === node.id && edge.fromId !== node.id && depths.has(edge.fromId))?.fromId ?? root.id
+    depths.set(node.id, (depths.get(parentId) ?? 0) + 1)
+    children.get(parentId)?.push(node.id)
+  })
+  return { depths, children }
+}
+
+function getGraphDepths(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], articleStructure = false) {
+  if (articleStructure) return getArticleHierarchy(nodes, rootId, edges).depths
   const depths = new Map<string, number>()
   const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
   if (!root) return depths
@@ -70,11 +103,60 @@ function getGraphDepths(nodes: KnowledgeNode[], rootId: string, edges: Knowledge
   return depths
 }
 
-function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], width: number, height: number, offsetX = 0, offsetY = 0) {
+function getGraphLayout(nodes: KnowledgeNode[], rootId: string, edges: KnowledgeEdge[], width: number, height: number, offsetX = 0, offsetY = 0, articleStructure = false) {
   const positions = new Map<string, { x: number; y: number }>()
   const root = nodes.find((node) => node.id === rootId) ?? nodes[0]
   if (!root) return positions
   const center = { x: offsetX + width / 2, y: offsetY + height / 2 }
+  if (articleStructure) {
+    const { depths, children } = getArticleHierarchy(nodes, root.id, edges)
+    const ranges = new Map<string, { first: number; last: number }>()
+    let leafCount = 0
+    const collectRanges = (id: string): { first: number; last: number } => {
+      const descendants = children.get(id) ?? []
+      if (!descendants.length) {
+        const slot = leafCount++
+        const range = { first: slot, last: slot }
+        ranges.set(id, range)
+        return range
+      }
+      const childRanges = descendants.map(collectRanges)
+      const range = { first: childRanges[0].first, last: childRanges[childRanges.length - 1].last }
+      ranges.set(id, range)
+      return range
+    }
+    collectRanges(root.id)
+    const totalLeaves = Math.max(1, leafCount)
+    const angleFor = (node: KnowledgeNode) => {
+      const range = ranges.get(node.id) ?? { first: 0, last: 0 }
+      const slot = (range.first + range.last) / 2
+      return -Math.PI / 2 + ((slot + .5) / totalLeaves) * Math.PI * 2
+    }
+    const depthGroups = new Map<number, KnowledgeNode[]>()
+    nodes.filter((node) => node.id !== root.id).forEach((node) => {
+      const depth = depths.get(node.id) ?? 1
+      depthGroups.set(depth, [...(depthGroups.get(depth) ?? []), node])
+    })
+    positions.set(root.id, center)
+    let previousRadius = 0
+    ;[...depthGroups.keys()].sort((a, b) => a - b).forEach((depth) => {
+      const group = depthGroups.get(depth) ?? []
+      const angles = group.map(angleFor).map((angle) => (angle + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b)
+      let minGap = Math.PI * 2
+      if (angles.length > 1) minGap = Math.min(...angles.map((angle, index) => {
+        const next = angles[(index + 1) % angles.length] + (index === angles.length - 1 ? Math.PI * 2 : 0)
+        return next - angle
+      }))
+      const minSeparationRadius = angles.length > 1 ? 112 / Math.max(.001, 2 * Math.sin(Math.min(Math.PI, minGap) / 2)) : 0
+      const radius = Math.max(230 + (depth - 1) * 168, previousRadius + 156, minSeparationRadius)
+      group.forEach((node) => {
+        const angle = angleFor(node)
+        positions.set(node.id, { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius })
+      })
+      previousRadius = radius
+    })
+    return positions
+  }
   const depths = getGraphDepths(nodes, root.id, edges)
   const rings = new Map<number, KnowledgeNode[]>()
   nodes.filter((node) => node.id !== root.id).forEach((node) => {
@@ -161,13 +243,14 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const nodeOrderKey = artifact.nodes.map((node) => node.id).join('\u0000')
   const selected = nodeById.get(selectedId) ?? root
   const connectionStyle = artifact.connectionStyle ?? 'curve'
-  const graphDepths = useMemo(() => getGraphDepths(artifact.nodes, artifact.rootId, artifact.edges), [nodeOrderKey, artifact.edges, artifact.rootId])
+  const articleStructure = Boolean(artifact.sourceText)
+  const graphDepths = useMemo(() => getGraphDepths(artifact.nodes, artifact.rootId, artifact.edges, articleStructure), [nodeOrderKey, artifact.edges, artifact.rootId, articleStructure])
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
     if (!query) return []
     return artifact.nodes.filter((node) => [node.text, node.description ?? '', node.source ?? '', kindLabels[node.kind ?? 'concept']].join(' ').toLocaleLowerCase().includes(query))
   }, [artifact.nodes, searchQuery])
-  const fallbackPositions = useMemo(() => getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY), [nodeOrderKey, artifact.edges, artifact.rootId, layoutBounds])
+  const fallbackPositions = useMemo(() => getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY, articleStructure), [nodeOrderKey, artifact.edges, artifact.rootId, layoutBounds, articleStructure])
   const positionFor = (node: KnowledgeNode) => ({ x: node.x ?? fallbackPositions.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallbackPositions.get(node.id)?.y ?? size.height / 2 })
   const moveNode = (id: string, x: number, y: number) => onChange({ ...artifact, nodes: artifact.nodes.map((node) => node.id === id ? { ...node, x, y } : node) })
   const canvas = useCanvasController(size.width, size.height, moveNode)
@@ -388,7 +471,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   }
   const fitSelected = () => { if (selected) focusNode(selected) }
   const arrangeGraph = () => {
-    const positions = getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
+    const positions = getGraphLayout(artifact.nodes, artifact.rootId, artifact.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY, articleStructure)
     const nodes = artifact.nodes.map((node) => ({ ...node, ...(positions.get(node.id) ?? {}) }))
     onChange({ ...artifact, nodes })
     const bounds = nodes.reduce((current, node) => {
@@ -443,8 +526,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
       setShowSource(false)
       setSearchQuery('')
       setSearchOpen(false)
-      const fallback = getGraphLayout(project.nodes, project.rootId, project.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
-      const importedDepths = getGraphDepths(project.nodes, project.rootId, project.edges)
+      const importedArticleStructure = Boolean(project.sourceText)
+      const fallback = getGraphLayout(project.nodes, project.rootId, project.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY, importedArticleStructure)
+      const importedDepths = getGraphDepths(project.nodes, project.rootId, project.edges, importedArticleStructure)
       const positions = new Map(project.nodes.map((node) => [node.id, { x: node.x ?? fallback.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallback.get(node.id)?.y ?? size.height / 2 }] as const))
       const bounds = project.nodes.reduce((current, node) => {
         const point = positions.get(node.id)!
@@ -496,7 +580,7 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
             const dimmed = Boolean(searchQuery.trim() && !matchesSearch(fromNode) && !matchesSearch(toNode))
             return <g key={edge.id} className={`graph-link graph-link--${sourceColor}${edge.directed ? ' graph-link--directed' : ''}${selectedEdgeId === edge.id ? ' graph-link--selected' : ''}${dimmed ? ' graph-link--dimmed' : ''}`} role="button" tabIndex={0} aria-label={`关系：${fromNode.text} ${edge.label ?? '相关'} ${toNode.text}`} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedEdgeId(edge.id); setSelectedId(fromNode.id) } if (event.key === 'Delete') removeConnection(edge.id) }}>
               <path d={path} markerEnd={edge.directed ? 'url(#aeback-knowledge-arrow)' : undefined} />
-              <text x={midpointX} y={midpointY - 7 - (index % 2) * 4} textAnchor="middle">{edge.label ?? '相关'}</text>
+              {(canvas.camera.zoom >= .82 || selectedEdgeId === edge.id) && <text x={midpointX} y={midpointY - 7 - (index % 2) * 4} textAnchor="middle">{edge.label ?? '相关'}</text>}
             </g>
           })}
           {connectionPreview && (() => {
