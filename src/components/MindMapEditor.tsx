@@ -1,9 +1,11 @@
 // Aeback mind map canvas — draggable nodes, editable branches, color, and layout direction.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
 import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
+import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, downloadMindMapRaster, parseMindMapProject } from '../lib/mindmap-export'
+import { downloadText, readTextFile } from '../lib/files'
 import type { MindMapArtifact, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
 
 type MindMapEditorProps = {
@@ -193,7 +195,10 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
+  const [exportNotice, setExportNotice] = useState('')
   const inlineInputRef = useRef<HTMLInputElement>(null)
+  const projectFileRef = useRef<HTMLInputElement>(null)
+  const exportMenuRef = useRef<HTMLDetailsElement>(null)
   const lastNodeTapRef = useRef<{ id: string; time: number } | null>(null)
   const selected = artifact.nodes.find((node) => node.id === selectedId) ?? root
   const direction = artifact.direction ?? 'radial'
@@ -527,6 +532,52 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
     return !descendants.has(node.id)
   })
 
+  const closeExportMenu = () => { if (exportMenuRef.current) exportMenuRef.current.open = false }
+  const getExportSvg = () => createMindMapSvg(artifact, new Map(artifact.nodes.map((node) => [node.id, positionFor(node)] as const)))
+  const exportSvg = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'svg', getExportSvg(), 'image/svg+xml;charset=utf-8')
+  }
+  const exportRaster = async (format: 'png' | 'jpg') => {
+    closeExportMenu()
+    try {
+      await downloadMindMapRaster(getExportSvg(), format, artifact.title)
+      setExportNotice(`${format.toUpperCase()} 已导出`)
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : '图片导出失败')
+    }
+    window.setTimeout(() => setExportNotice(''), 3200)
+  }
+  const exportProject = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'aeback', createMindMapProject(artifact), 'application/vnd.aeback.project+json;charset=utf-8')
+  }
+  const exportOutline = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'md', createMindMapOutline(artifact), 'text/markdown;charset=utf-8')
+  }
+  const importProject = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) return
+    closeExportMenu()
+    try {
+      assertMindMapProjectFileSize(file)
+      const project = parseMindMapProject(JSON.parse(await readTextFile(file)))
+      if (!window.confirm(`导入「${project.title}」并替换当前思维导图？当前版本可用撤销恢复。`)) return
+      commitChange({ ...project, id: artifact.id, updatedAt: new Date().toISOString() })
+      setSelectedId(project.nodes.find((node) => node.parentId === null)?.id ?? '')
+      setInspectorOpen(true)
+      canvas.resetCamera()
+      setExportNotice('工程已导入')
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : '工程导入失败')
+    } finally {
+      input.value = ''
+      window.setTimeout(() => setExportNotice(''), 4000)
+    }
+  }
+
   return (
     <div className="canvas-workspace canvas-workspace--mindmap">
       <svg
@@ -596,7 +647,22 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
         </g>
       </svg>
 
-      <CanvasHeader title={artifact.title} onTitleChange={(title) => commitChange({ ...artifact, title }, 'map-title')} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme} />
+      <CanvasHeader title={artifact.title} onTitleChange={(title) => commitChange({ ...artifact, title }, 'map-title')} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme}>
+        <details className="canvas-export-menu" ref={exportMenuRef}>
+          <summary className="canvas-header-action" aria-label="导出或导入思维导图"><Icon name="download" size={15} /><span>导出</span></summary>
+          <div className="canvas-export-dropdown">
+            <button type="button" onClick={() => void exportRaster('png')}>导出 PNG 图片</button>
+            <button type="button" onClick={() => void exportRaster('jpg')}>导出 JPG 图片</button>
+            <button type="button" onClick={exportSvg}>导出 SVG 矢量图</button>
+            <button type="button" onClick={exportProject}>导出 Aeback 工程</button>
+            <button type="button" onClick={exportOutline}>导出 Markdown 大纲</button>
+            <div className="canvas-export-divider" />
+            <button type="button" onClick={() => projectFileRef.current?.click()}>导入 Aeback 工程</button>
+            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label="选择 Aeback 思维导图工程" onChange={(event) => void importProject(event)} />
+          </div>
+        </details>
+      </CanvasHeader>
+      {exportNotice && <div className="canvas-export-status" role="status">{exportNotice}</div>}
       <div className="canvas-tool-rail" role="toolbar" aria-label="思维导图工具">
         <button className="canvas-tool-primary" type="button" aria-label="添加节点" title="添加节点" onClick={addNode}><Icon name="plus" size={18} /></button>
         <div className="history-controls" role="group" aria-label="撤销与重做"><button className="direction-button" type="button" aria-label="撤销" title="撤销 Ctrl+Z" disabled={!historyStatus.canUndo} onClick={undo}><Icon name="undo" size={16} /></button><button className="direction-button" type="button" aria-label="重做" title="重做 Ctrl+Shift+Z" disabled={!historyStatus.canRedo} onClick={redo}><Icon name="redo" size={16} /></button></div>
