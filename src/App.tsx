@@ -94,6 +94,36 @@ function App() {
       // Keep the current sidebar state for this session if storage is unavailable.
     }
   }, [sidebarCollapsed])
+  useEffect(() => {
+    const dismissOutside = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return
+      document.querySelectorAll<HTMLDetailsElement>('#root details[open]').forEach((menu) => {
+        if (!menu.contains(target)) menu.open = false
+      })
+      if (!target.closest('.create-anchor')) setCreateMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => dismissOutside(event.target)
+    const onFocusIn = (event: FocusEvent) => dismissOutside(event.target)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const openMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>('#root details[open]'))
+      const activeMenu = openMenus.find((menu) => menu.contains(document.activeElement)) ?? openMenus[0]
+      openMenus.forEach((menu) => { menu.open = false })
+      if (activeMenu) {
+        event.preventDefault()
+        activeMenu.querySelector('summary')?.focus()
+      }
+      setCreateMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
 
   const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedId)
   const filteredArtifacts = useMemo(() => artifacts
