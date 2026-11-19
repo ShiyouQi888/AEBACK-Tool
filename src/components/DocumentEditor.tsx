@@ -9,6 +9,11 @@ import Icon from './Icon'
 
 type DocumentEditorProps = { artifact: DocumentArtifact; onChange: (artifact: DocumentArtifact) => void }
 type View = 'edit' | 'split' | 'preview'
+const codeLanguages = [
+  { label: '纯文本', id: '' }, { label: 'JavaScript', id: 'javascript' }, { label: 'TypeScript', id: 'typescript' },
+  { label: 'Python', id: 'python' }, { label: 'JSON', id: 'json' }, { label: 'HTML', id: 'html' },
+  { label: 'CSS', id: 'css' }, { label: 'SQL', id: 'sql' }, { label: 'Bash', id: 'bash' }, { label: 'Markdown', id: 'markdown' },
+]
 
 function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
   const editorRef = useRef<HTMLTextAreaElement>(null)
@@ -63,6 +68,19 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     update(artifact.content.slice(0, start) + before + selection + after + artifact.content.slice(end))
     selectText(start + before.length, start + before.length + selection.length)
   }
+  const insertCodeBlock = (language: string) => {
+    editable()
+    const editor = editorRef.current
+    const start = editor?.selectionStart ?? artifact.content.length
+    const end = editor?.selectionEnd ?? start
+    const selected = artifact.content.slice(start, end) || '代码'
+    const prefix = start > 0 && artifact.content[start - 1] !== '\n' ? '\n' : ''
+    const suffix = end >= artifact.content.length || artifact.content[end] !== '\n' ? '\n' : ''
+    const opening = `${prefix}\`\`\`${language}\n`
+    const closing = `\n\`\`\`${suffix}`
+    update(artifact.content.slice(0, start) + opening + selected + closing + artifact.content.slice(end))
+    selectText(start + opening.length, start + opening.length + selected.length)
+  }
   const prefixLines = (prefix: string) => {
     editable()
     const editor = editorRef.current
@@ -108,7 +126,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
   const exportHtml = async (print = false) => {
     const { renderToStaticMarkup } = await import('react-dom/server')
     const title = artifact.title.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
-    const body = renderToStaticMarkup(<MarkdownContent content={artifact.content} />)
+    const body = renderToStaticMarkup(<MarkdownContent content={artifact.content} interactive={false} />)
     const html = `<!doctype html>\n<!-- Aeback document export -->\n<html lang="zh-CN"><meta charset="utf-8"><title>${title}</title><style>body{max-width:800px;margin:48px auto;padding:0 24px;color:#222;font:16px/1.8 system-ui}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}pre{padding:16px;background:#f4f4f4;white-space:pre-wrap}img{max-width:100%}blockquote{border-left:3px solid #ccc;margin-left:0;padding-left:20px}@media print{body{margin:0;max-width:none}a{color:inherit}}</style><body><h1>${title}</h1>${body}</body></html>`
     if (!print) { downloadText(artifact.title, 'html', html, 'text/html;charset=utf-8'); return }
     const frame = document.createElement('iframe')
@@ -152,7 +170,7 @@ function DocumentEditor({ artifact, onChange }: DocumentEditorProps) {
     </div>
     {view !== 'preview' && <div className="document-formatbar" role="toolbar" aria-label="文字格式">
       <button type="button" title="一级标题" onClick={() => prefixLines('# ')}>H1</button><button type="button" title="二级标题" onClick={() => prefixLines('## ')}>H2</button><button type="button" aria-label="加粗" title="加粗 Ctrl+B" onClick={() => wrap('**')}><b>B</b></button><button type="button" aria-label="斜体" title="斜体 Ctrl+I" onClick={() => wrap('*')}><i>I</i></button><button type="button" aria-label="删除线" title="删除线" onClick={() => wrap('~~')}><s>S</s></button><span />
-      <button type="button" aria-label="无序列表" title="无序列表" onClick={() => prefixLines('- ')}><Icon name="list" size={16} /></button><button type="button" aria-label="任务列表" title="任务列表" onClick={() => prefixLines('- [ ] ')}>☐</button><button type="button" aria-label="引用" title="引用" onClick={() => prefixLines('> ')}>❞</button><button type="button" aria-label="插入链接" title="链接 Ctrl+K" onClick={() => wrap('[', '](https://)', '链接文字')}>↗</button><button type="button" aria-label="代码块" title="代码块" onClick={() => wrap('\n```\n', '\n```\n', '代码')}>{'</>'}</button><button type="button" aria-label="插入表格" title="插入表格" onClick={() => wrap('\n', '\n', '| 列名 | 列名 |\n| --- | --- |\n| 内容 | 内容 |')}><Icon name="table" size={16} /></button>
+      <button type="button" aria-label="无序列表" title="无序列表" onClick={() => prefixLines('- ')}><Icon name="list" size={16} /></button><button type="button" aria-label="任务列表" title="任务列表" onClick={() => prefixLines('- [ ] ')}>☐</button><button type="button" aria-label="高亮块" title="高亮块（引用样式）" onClick={() => prefixLines('> ')}>❞</button><button type="button" aria-label="高亮文字" title="高亮文字" onClick={() => wrap('==', '==', '重点内容')}>▰</button><button type="button" aria-label="插入链接" title="链接 Ctrl+K" onClick={() => wrap('[', '](https://)', '链接文字')}>↗</button><details className="editor-menu document-code-menu"><summary aria-label="插入代码块" title="代码块">{'</>'}</summary><div>{codeLanguages.map((language) => <button key={language.label} type="button" onClick={(event) => { insertCodeBlock(language.id); event.currentTarget.closest('details')?.removeAttribute('open') }}>{language.label}</button>)}</div></details><button type="button" aria-label="插入表格" title="插入表格" onClick={() => wrap('\n', '\n', '| 列名 | 列名 |\n| --- | --- |\n| 内容 | 内容 |')}><Icon name="table" size={16} /></button>
     </div>}
     {findOpen && <div className="document-findbar"><input ref={findRef} aria-label="查找文字" placeholder="查找" value={query} onChange={(event) => { setQuery(event.target.value); setMatchIndex(-1) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findNext(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') setFindOpen(false) }} /><span>{matches.length ? `${matchIndex < 0 ? 0 : matchIndex + 1} / ${matches.length}` : '0'}</span><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext(-1)}>上一处</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => findNext()}>下一处</button><input aria-label="替换文字" placeholder="替换为" value={replacement} onChange={(event) => setReplacement(event.target.value)} /><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(false)}>替换</button><button className="tool-button" type="button" disabled={!matches.length} onClick={() => replace(true)}>全部替换</button><button className="tool-button" type="button" aria-label="关闭查找" onClick={() => setFindOpen(false)}><Icon name="close" size={14} /></button></div>}
     <div className={`document-layout${showOutline ? ' document-layout--with-outline' : ''}`}>

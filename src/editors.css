@@ -54,10 +54,22 @@
 .document-rendered h4, .document-rendered h5, .document-rendered h6 { font-size: 16px; }
 .document-rendered p, .document-rendered ul, .document-rendered ol { margin: 1em 0; }
 .document-rendered a { color: var(--aeback-accent); text-underline-offset: 3px; }
-.document-rendered blockquote { margin: 1.2em 0; padding: 1px 18px; border-left: 3px solid var(--aeback-brand); color: var(--aeback-subtle); }
-.document-rendered code { padding: 2px 5px; border-radius: 4px; background: var(--aeback-canvas); font-family: Consolas, monospace; font-size: .88em; }
-.document-rendered pre { padding: 16px; border: 1px solid var(--aeback-line); border-radius: 8px; background: var(--aeback-canvas); overflow-x: auto; line-height: 1.6; }
-.document-rendered pre code { padding: 0; }
+.document-rendered blockquote { margin: 1.2em 0; padding: 9px 16px; border-left: 3px solid var(--aeback-accent); border-radius: 0 7px 7px 0; background: var(--aeback-accent-soft); color: var(--aeback-subtle); }
+.document-rendered mark { padding: 1px 4px; border-radius: 3px; color: var(--aeback-ink); background: var(--aeback-accent-soft); box-shadow: inset 0 -1px 0 var(--aeback-focus); }
+.document-rendered code { padding: 2px 5px; border-radius: 4px; background: var(--aeback-canvas); font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; font-size: .88em; }
+.document-codeblock { max-width: 100%; margin: 1.25em 0; overflow: hidden; border: 1px solid var(--aeback-line); border-radius: 9px; background: var(--aeback-canvas); }
+.document-codeblock-toolbar { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px 0 14px; border-bottom: 1px solid var(--aeback-line); color: var(--aeback-muted); font: 10px/1.2 'SFMono-Regular', Consolas, monospace; letter-spacing: .07em; }
+.document-codeblock-toolbar button { min-height: 25px; padding: 0 7px; color: var(--aeback-subtle); border: 0; border-radius: 4px; background: transparent; font: inherit; letter-spacing: 0; cursor: pointer; }
+.document-codeblock-toolbar button:hover, .document-codeblock-toolbar button:focus-visible { color: var(--aeback-ink); background: var(--aeback-surface); outline: 0; }
+.document-rendered .document-codeblock pre { max-width: 100%; margin: 0; padding: 15px 16px; overflow-x: auto; border: 0; border-radius: 0; background: transparent; line-height: 1.7; tab-size: 2; }
+.document-rendered .document-codeblock code { display: block; min-width: max-content; padding: 0; color: var(--aeback-ink); border-radius: 0; background: transparent; font-size: 12.5px; white-space: pre; }
+.document-rendered .document-codeblock .hljs-keyword, .document-rendered .document-codeblock .hljs-selector-tag, .document-rendered .document-codeblock .hljs-literal, .document-rendered .document-codeblock .hljs-built_in { color: var(--aeback-code-keyword); }
+.document-rendered .document-codeblock .hljs-string, .document-rendered .document-codeblock .hljs-doctag, .document-rendered .document-codeblock .hljs-attr, .document-rendered .document-codeblock .hljs-template-variable { color: var(--aeback-code-string); }
+.document-rendered .document-codeblock .hljs-number, .document-rendered .document-codeblock .hljs-symbol, .document-rendered .document-codeblock .hljs-bullet, .document-rendered .document-codeblock .hljs-regexp { color: var(--aeback-code-number); }
+.document-rendered .document-codeblock .hljs-title, .document-rendered .document-codeblock .hljs-title.function_, .document-rendered .document-codeblock .hljs-section, .document-rendered .document-codeblock .hljs-function { color: var(--aeback-code-title); }
+.document-rendered .document-codeblock .hljs-type, .document-rendered .document-codeblock .hljs-class, .document-rendered .document-codeblock .hljs-params { color: var(--aeback-code-type); }
+.document-rendered .document-codeblock .hljs-comment, .document-rendered .document-codeblock .hljs-quote { color: var(--aeback-code-comment); font-style: italic; }
+.document-rendered .document-codeblock .hljs-meta, .document-rendered .document-codeblock .hljs-name, .document-rendered .document-codeblock .hljs-tag, .document-rendered .document-codeblock .hljs-variable.language_ { color: var(--aeback-code-meta); }
 .document-rendered table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 13px; }
 .document-rendered td, .document-rendered th { padding: 8px 12px; border: 1px solid var(--aeback-line); }
 .document-rendered th { background: var(--aeback-canvas); }

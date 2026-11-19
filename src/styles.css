@@ -27,6 +27,13 @@
   --aeback-danger: #ff6b61;
   --aeback-status: #18c89a;
   --aeback-focus: #ff8d62;
+  --aeback-code-keyword: #c792ea;
+  --aeback-code-string: #c3e88d;
+  --aeback-code-number: #f78c6c;
+  --aeback-code-title: #82aaff;
+  --aeback-code-type: #ffcb6b;
+  --aeback-code-comment: #7f8799;
+  --aeback-code-meta: #89ddff;
   --aeback-overlay: rgba(0, 0, 0, .72);
   --aeback-shadow-soft: rgba(0, 0, 0, .24);
   --aeback-shadow-medium: rgba(0, 0, 0, .4);
@@ -61,6 +68,13 @@
   --aeback-danger: #d85a50;
   --aeback-status: #168662;
   --aeback-focus: #ed6038;
+  --aeback-code-keyword: #8e45b5;
+  --aeback-code-string: #397b22;
+  --aeback-code-number: #bd4c25;
+  --aeback-code-title: #315fbd;
+  --aeback-code-type: #936408;
+  --aeback-code-comment: #78808c;
+  --aeback-code-meta: #14728b;
   --aeback-overlay: rgba(27, 32, 43, .34);
   --aeback-shadow-soft: rgba(34, 42, 56, .08);
   --aeback-shadow-medium: rgba(34, 42, 56, .13);
