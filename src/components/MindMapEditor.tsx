@@ -147,6 +147,7 @@ function getLayout(nodes: MindMapNode[], direction: MindMapDirection, width: num
   positions.set(root.id, { ...center, depth: 0 })
 
   if (direction === 'radial') {
+    const firstRingRadius = 266
     const angleFor = (node: MindMapNode) => -Math.PI / 2 + ((slotFor(node) + (leafTotal - 1) / 2 + 0.5) / leafTotal) * Math.PI * 2
     const depthGroups = new Map<number, MindMapNode[]>()
     nodes.filter((node) => node.id !== root.id).forEach((node) => {
@@ -166,7 +167,7 @@ function getLayout(nodes: MindMapNode[], direction: MindMapDirection, width: num
       }
       const angleForChord = Math.min(Math.PI, minGap)
       const minSeparationRadius = sortedAngles.length > 1 ? 190 / Math.max(0.001, 2 * Math.sin(angleForChord / 2)) : 0
-      const radius = Math.max(230 + (depth - 1) * 210, previousRadius + 210, minSeparationRadius)
+      const radius = Math.max(firstRingRadius + (depth - 1) * 210, previousRadius + 210, minSeparationRadius)
       group.forEach((node) => {
         const angle = angleFor(node)
         positions.set(node.id, { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius, depth })
@@ -177,10 +178,10 @@ function getLayout(nodes: MindMapNode[], direction: MindMapDirection, width: num
     nodes.filter((node) => node.id !== root.id).forEach((node) => {
       const depth = depthById.get(node.id) ?? 1
       const slot = slotFor(node)
-      if (direction === 'down') positions.set(node.id, { x: center.x + slot * 194, y: center.y + depth * 112, depth })
+      if (direction === 'down') positions.set(node.id, { x: center.x + slot * 194, y: center.y + 36 + depth * 112, depth })
       else {
         const sign = direction === 'right' ? 1 : -1
-        positions.set(node.id, { x: center.x + sign * depth * 212, y: center.y + slot * 88, depth })
+        positions.set(node.id, { x: center.x + sign * (36 + depth * 212), y: center.y + slot * 88, depth })
       }
     })
   }
