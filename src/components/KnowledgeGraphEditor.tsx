@@ -1,10 +1,13 @@
 // Aeback knowledge graph canvas — movable nodes, editable links, source context, and article import.
-import { useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import ArticleImportDialog from './ArticleImportDialog'
 import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
 import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
+import { assertGraphProjectFileSize, createGraphProject, createGraphReport, createGraphSvg, parseGraphProject } from '../lib/graph-export'
+import { downloadCanvasRaster } from '../lib/canvas-export'
+import { downloadText, readTextFile } from '../lib/files'
 import type { GraphArtifact, GraphLineStyle, KnowledgeEdge, KnowledgeNode, KnowledgeNodeKind, NodeColor } from '../types'
 
 type KnowledgeGraphEditorProps = {
@@ -112,6 +115,9 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const [importOpen, setImportOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [exportNotice, setExportNotice] = useState('')
+  const projectFileRef = useRef<HTMLInputElement>(null)
+  const exportMenuRef = useRef<HTMLDetailsElement>(null)
   const nodeById = useMemo(() => new Map(artifact.nodes.map((node) => [node.id, node] as const)), [artifact.nodes])
   const nodeOrderKey = artifact.nodes.map((node) => node.id).join('\u0000')
   const selected = nodeById.get(selectedId) ?? root
@@ -268,6 +274,64 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
   const connections = selected ? artifact.edges.filter((edge) => edge.fromId === selected.id || edge.toId === selected.id) : []
   const selectedColor = selected?.color ?? (selected?.id === rootNode.id ? 'green' : palette[Math.max(0, artifact.nodes.indexOf(selected)) % palette.length]?.value ?? 'blue')
 
+  const closeExportMenu = () => { if (exportMenuRef.current) exportMenuRef.current.open = false }
+  const getExportSvg = () => createGraphSvg(artifact, new Map(artifact.nodes.map((node) => [node.id, positionFor(node)] as const)))
+  const exportSvg = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'svg', getExportSvg(), 'image/svg+xml;charset=utf-8')
+  }
+  const exportRaster = async (format: 'png' | 'jpg') => {
+    closeExportMenu()
+    try {
+      await downloadCanvasRaster(getExportSvg(), format, artifact.title)
+      setExportNotice(`${format.toUpperCase()} 已导出`)
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : '图片导出失败')
+    }
+    window.setTimeout(() => setExportNotice(''), 3200)
+  }
+  const exportProject = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'aeback', createGraphProject(artifact), 'application/vnd.aeback.project+json;charset=utf-8')
+  }
+  const exportReport = () => {
+    closeExportMenu()
+    downloadText(artifact.title, 'md', createGraphReport(artifact), 'text/markdown;charset=utf-8')
+  }
+  const importProject = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) return
+    closeExportMenu()
+    try {
+      assertGraphProjectFileSize(file)
+      const project = parseGraphProject(JSON.parse(await readTextFile(file)))
+      if (!window.confirm(`导入「${project.title}」并替换当前知识图谱？`)) return
+      const replacement = { ...project, id: artifact.id, updatedAt: new Date().toISOString() }
+      onChange(replacement)
+      setSelectedId(project.rootId)
+      setSelectedEdgeId('')
+      setTargetId('')
+      setShowSource(false)
+      setSearchQuery('')
+      setSearchOpen(false)
+      const fallback = getGraphLayout(project.nodes, project.rootId, project.edges, layoutBounds.width, layoutBounds.height, layoutBounds.offsetX, layoutBounds.offsetY)
+      const positions = new Map(project.nodes.map((node) => [node.id, { x: node.x ?? fallback.get(node.id)?.x ?? size.width / 2, y: node.y ?? fallback.get(node.id)?.y ?? size.height / 2 }] as const))
+      const bounds = project.nodes.reduce((current, node) => {
+        const point = positions.get(node.id)!
+        const radius = getNodeHalfSize(node, project.rootId).width
+        return { minX: Math.min(current.minX, point.x - radius), minY: Math.min(current.minY, point.y - radius), maxX: Math.max(current.maxX, point.x + radius), maxY: Math.max(current.maxY, point.y + radius) }
+      }, { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: Number.NEGATIVE_INFINITY, maxY: Number.NEGATIVE_INFINITY })
+      canvas.fitBounds(bounds, layoutBounds.viewport)
+      setExportNotice('工程已导入')
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : '工程导入失败')
+    } finally {
+      input.value = ''
+      window.setTimeout(() => setExportNotice(''), 4000)
+    }
+  }
+
   return (
     <div className="canvas-workspace canvas-workspace--graph">
       <svg
@@ -333,8 +397,22 @@ function KnowledgeGraphEditor({ artifact, onChange, onBack, onDelete, onImportAr
 
       <CanvasHeader title={artifact.title} onTitleChange={(title) => onChange({ ...artifact, title })} onBack={onBack} onDelete={onDelete} theme={theme} onToggleTheme={onToggleTheme}>
         <button className="canvas-header-action" type="button" onClick={() => setImportOpen(true)}><Icon name="document" size={15} />导入文章</button>
+        <details className="canvas-export-menu" ref={exportMenuRef}>
+          <summary className="canvas-header-action" aria-label="导出或导入知识图谱"><Icon name="download" size={15} /><span>导出</span></summary>
+          <div className="canvas-export-dropdown">
+            <button type="button" onClick={() => void exportRaster('png')}>导出 PNG 图片</button>
+            <button type="button" onClick={() => void exportRaster('jpg')}>导出 JPG 图片</button>
+            <button type="button" onClick={exportSvg}>导出 SVG 矢量图</button>
+            <button type="button" onClick={exportProject}>导出 Aeback 工程</button>
+            <button type="button" onClick={exportReport}>导出 Markdown 报告</button>
+            <div className="canvas-export-divider" />
+            <button type="button" onClick={() => projectFileRef.current?.click()}>导入 Aeback 工程</button>
+            <input ref={projectFileRef} hidden type="file" accept=".aeback,application/json" aria-label="选择 Aeback 知识图谱工程" onChange={(event) => void importProject(event)} />
+          </div>
+        </details>
         <button className="canvas-header-primary" type="button" onClick={addNode}><Icon name="plus" size={15} />关联节点</button>
       </CanvasHeader>
+      {exportNotice && <div className="canvas-export-status" role="status">{exportNotice}</div>}
       <div className="canvas-tool-rail graph-tool-rail" role="toolbar" aria-label="知识图谱工具">
         <div className="graph-tool-group" role="group" aria-label="节点操作">
           <button className="canvas-tool-primary" type="button" aria-label="添加关联节点" title="添加关联节点" onClick={addNode}><Icon name="plus" size={18} /></button>

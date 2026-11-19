@@ -4,7 +4,8 @@ import CanvasHeader from './CanvasHeader'
 import Icon, { type IconName } from './Icon'
 import type { ThemeMode } from './ThemeToggleButton'
 import { useCanvasController, useViewportSize } from '../lib/useCanvasController'
-import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, downloadMindMapRaster, parseMindMapProject } from '../lib/mindmap-export'
+import { assertMindMapProjectFileSize, createMindMapOutline, createMindMapProject, createMindMapSvg, parseMindMapProject } from '../lib/mindmap-export'
+import { downloadCanvasRaster } from '../lib/canvas-export'
 import { downloadText, readTextFile } from '../lib/files'
 import type { MindMapArtifact, MindMapDirection, MindMapLineStyle, MindMapNode, NodeColor } from '../types'
 
@@ -541,7 +542,7 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
   const exportRaster = async (format: 'png' | 'jpg') => {
     closeExportMenu()
     try {
-      await downloadMindMapRaster(getExportSvg(), format, artifact.title)
+      await downloadCanvasRaster(getExportSvg(), format, artifact.title)
       setExportNotice(`${format.toUpperCase()} 已导出`)
     } catch (error) {
       setExportNotice(error instanceof Error ? error.message : '图片导出失败')
