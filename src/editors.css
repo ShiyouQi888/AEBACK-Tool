@@ -89,7 +89,7 @@
 .table-formulabar > input { flex: 1; width: 100%; min-width: 0; height: 38px; padding: 0 8px; color: var(--aeback-ink); border: 0; background: transparent; outline: 0; font-family: Consolas, 'Microsoft YaHei', monospace; font-size: 12px; }
 .formula-help > div { width: 280px; padding: 8px 16px; color: var(--aeback-subtle); font-size: 12px; line-height: 1.7; }
 .formula-help p { margin: 5px 0; }
-.table-formatbar { min-height: 42px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 5px 12px; border-bottom: 1px solid var(--aeback-line); background: var(--aeback-surface); }
+.table-formatbar { min-width: 0; min-height: 32px; flex: 1 1 350px; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; padding: 0 8px; border: 0; background: transparent; }
 .table-format-group { display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--aeback-line); border-radius: 6px; background: var(--aeback-canvas); }
 .table-formatbar .tool-button { min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 7px; border-color: transparent; background: transparent; }
 .table-formatbar .tool-button[aria-pressed="true"] { color: var(--aeback-accent); border-color: var(--aeback-line); background: var(--aeback-accent-soft); }
@@ -229,6 +229,7 @@
 .main-content--table { width: 100%; max-width: none; min-height: 0; flex: 1 1 auto; display: flex; overflow: hidden; margin: 0; padding: 0; }
 .main-content--table > .table-editor-shell { width: 100%; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-radius: 0; background: var(--aeback-surface); }
 .main-content--table .editor-commandbar, .main-content--table .table-viewbar, .main-content--table .table-formulabar, .main-content--table .table-formatbar, .main-content--table .editor-statusbar { flex: 0 0 auto; }
+.main-content--table .editor-commandbar > .table-formatbar { flex: 1 1 350px; }
 .main-content--table .table-scroll { height: auto; min-height: 0; flex: 1 1 auto; background: transparent; }
 
 @media (max-width: 680px) {
