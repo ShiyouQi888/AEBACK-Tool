@@ -103,7 +103,7 @@
 .table-font-color-preview { min-width: 16px; height: 19px; display: inline-flex; align-items: center; justify-content: center; border-bottom: 2px solid currentColor; font-size: 13px; font-weight: 700; }
 .table-text-color-menu > div { min-width: 208px; }
 .table-text-color-options { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; padding: 8px 10px; }
-.table-text-color-swatch { width: 21px; min-height: 21px; height: 21px; padding: 0 !important; border: 1px solid rgba(255,255,255,.22) !important; border-radius: 50% !important; cursor: pointer; }
+.table-text-color-swatch { width: 22px !important; min-width: 22px; min-height: 22px !important; height: 22px !important; aspect-ratio: 1; padding: 0 !important; border: 1px solid rgba(255,255,255,.22) !important; border-radius: 50% !important; cursor: pointer; }
 .table-text-color-swatch[aria-pressed="true"] { outline: 2px solid var(--aeback-ink); outline-offset: 2px; }
 .table-text-color-swatch:disabled { opacity: .4; cursor: default; }
 .table-custom-color { min-height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; color: var(--aeback-subtle); font-size: 11px; cursor: pointer; }
