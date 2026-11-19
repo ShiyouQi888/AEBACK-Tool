@@ -110,9 +110,10 @@
 .table-border-menu > div { width: 238px; min-width: 238px; max-height: min(72vh, 480px); overflow-y: auto; }
 .table-border-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px 5px 6px; }
 .table-border-preset-grid button { min-height: 30px; padding: 4px 7px; }
-.table-border-width-options { display: flex; gap: 4px; padding: 3px 6px 6px; }
-.table-border-width-options button { min-width: 48px; min-height: 28px; padding: 3px 8px; }
-.table-border-width-options button[aria-pressed="true"] { color: var(--aeback-accent); background: var(--aeback-accent-soft); }
+.table-border-width-control { display: flex; align-items: center; gap: 10px; padding: 4px 10px 8px; }
+.table-border-width-control input { flex: 1; min-width: 0; height: 18px; margin: 0; accent-color: var(--aeback-accent); cursor: pointer; }
+.table-border-width-control input:disabled { opacity: .45; cursor: default; }
+.table-border-width-control output { min-width: 28px; color: var(--aeback-ink); font: 11px Consolas, monospace; text-align: right; }
 .table-border-color-options { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding: 8px 10px; }
 .table-custom-color { min-height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; color: var(--aeback-subtle); font-size: 11px; cursor: pointer; }
 .table-custom-color input { width: 30px; height: 24px; padding: 1px; border: 1px solid var(--aeback-line); border-radius: 4px; background: var(--aeback-canvas); cursor: pointer; }
@@ -131,6 +132,8 @@
 .aeback-table .smart-table .table-row-number { position: sticky; z-index: 2; left: 0; width: 46px; min-width: 46px; background: var(--aeback-canvas); color: var(--aeback-muted); font: 11px Consolas, monospace; text-align: center; }
 .aeback-table .smart-table thead .table-row-number { z-index: 4; }
 .table-row-number button { width: 100%; height: 40px; padding: 0; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.table-row-number .table-select-all-button { display: grid; place-items: center; color: var(--aeback-muted); }
+.table-row-number .table-select-all-button:hover { color: var(--aeback-accent); background: var(--aeback-accent-soft); }
 .aeback-table .smart-table tbody td { height: 40px; color: var(--aeback-ink); font-size: 13px; outline: 0; }
 .aeback-table .smart-table td > span { display: block; width: 100%; overflow: hidden; padding: 8px 10px; white-space: nowrap; text-overflow: ellipsis; }
 .table-cell--numeric > span { font-variant-numeric: tabular-nums; }
