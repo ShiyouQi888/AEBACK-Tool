@@ -84,11 +84,15 @@ export type TableSummaryType = 'none' | 'count' | 'nonEmptyCount' | 'sum' | 'ave
 export type TableRowHeight = 'compact' | 'normal' | 'comfortable'
 export type TableCellColor = 'purple' | 'blue' | 'green' | 'yellow' | 'orange' | 'red'
 export type TableCellAlignment = 'left' | 'center' | 'right'
+export type TableCellBorderSide = 'top' | 'right' | 'bottom' | 'left'
+export type TableCellBorderStyle = { color: string; width: 1 | 2 }
+export type TableCellBorders = Partial<Record<TableCellBorderSide, TableCellBorderStyle>>
 export type TableCellFormatting = {
   alignment?: TableCellAlignment
   wrap?: boolean
   fontSize?: number
   textColor?: string
+  borders?: TableCellBorders
 }
 
 export type WorkspaceArtifact = MindMapArtifact | GraphArtifact | DocumentArtifact | TableArtifact

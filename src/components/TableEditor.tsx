@@ -1,7 +1,7 @@
 // Aeback smart table — typed grid, stable formula coordinates, view sorting, range clipboard, and atomic history.
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from 'react'
 import { toBlob } from 'html-to-image'
-import type { TableArtifact, TableCellAlignment, TableCellColor, TableCellFormatting, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
+import type { TableArtifact, TableCellAlignment, TableCellBorderStyle, TableCellColor, TableCellFormatting, TableColumnType, TableRowHeight, TableSummaryType } from '../types'
 import { useArtifactHistory } from '../lib/useArtifactHistory'
 import { downloadBlob, downloadText, readTextFile } from '../lib/files'
 import { adjustCellColors, adjustCellMap, adjustFormulaReferences, columnName, columnTypes, displayCell, evaluateTable, inferColumnType, MAX_COLUMNS, MAX_ROWS, parseDelimited, serializeDelimited, translateFormulaReferences, validateCell } from '../lib/table'
@@ -11,6 +11,7 @@ import TableImportDialog from './TableImportDialog'
 type TableEditorProps = { artifact: TableArtifact; onChange: (artifact: TableArtifact) => void }
 type Address = { row: number; column: number }
 type EditingCell = Address & { draft: string; source?: 'bar' }
+type BorderPreset = 'all' | 'outer' | 'insideHorizontal' | 'insideVertical' | 'top' | 'right' | 'bottom' | 'left'
 type TableClipboardRange = {
   sourceRows: number[]
   sourceColumn: number
@@ -29,11 +30,18 @@ const textColors = [
   { value: '#ff6b61', label: '红色' }, { value: '#ff9c4a', label: '橙色' }, { value: '#d9b84c', label: '黄色' },
   { value: '#44bd95', label: '绿色' }, { value: '#5798f5', label: '蓝色' }, { value: '#a375ef', label: '紫色' },
 ]
+const borderColors = [{ value: '#8b93a0', label: '灰色' }, ...textColors]
 const fontSizes = [10, 11, 12, 13, 14, 16, 18, 20, 24]
 const alignments: Array<{ value: TableCellAlignment; label: string; icon: IconName }> = [
   { value: 'left', label: '左对齐', icon: 'alignLeft' },
   { value: 'center', label: '居中', icon: 'alignCenter' },
   { value: 'right', label: '右对齐', icon: 'alignRight' },
+]
+const borderPresets: Array<{ value: BorderPreset; label: string }> = [
+  { value: 'all', label: '全部边框' }, { value: 'outer', label: '外侧边框' },
+  { value: 'insideHorizontal', label: '内侧横线' }, { value: 'insideVertical', label: '内侧竖线' },
+  { value: 'top', label: '上边框' }, { value: 'right', label: '右边框' },
+  { value: 'bottom', label: '下边框' }, { value: 'left', label: '左边框' },
 ]
 const rowHeights: Array<{ value: TableRowHeight; label: string }> = [
   { value: 'compact', label: '紧凑' }, { value: 'normal', label: '标准' }, { value: 'comfortable', label: '舒适' },
@@ -43,6 +51,11 @@ const summaryOptions: Array<{ value: TableSummaryType; label: string }> = [
   { value: 'sum', label: '求和' }, { value: 'average', label: '平均值' }, { value: 'min', label: '最小值' }, { value: 'max', label: '最大值' },
 ]
 const imagePlaceholder = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#252630"/><path d="M34 52l15-16 11 11 9-9 17 18H34z" fill="none" stroke="#737581" stroke-width="3"/><circle cx="45" cy="29" r="5" fill="#737581"/></svg>')}`
+
+function tableBorderCss(border?: TableCellBorderStyle) {
+  if (!border || (border.width !== 1 && border.width !== 2) || !/^#[\da-f]{6}$/i.test(border.color)) return undefined
+  return `${border.width}px solid ${border.color}`
+}
 
 function TableImageCell({ source }: { source: string }) {
   const [failed, setFailed] = useState(false)
@@ -67,6 +80,8 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
   const [page, setPage] = useState(0)
   const [message, setMessage] = useState('')
   const [imageExporting, setImageExporting] = useState(false)
+  const [borderColor, setBorderColor] = useState('#8b93a0')
+  const [borderWidth, setBorderWidth] = useState<1 | 2>(1)
   const [importData, setImportData] = useState<string[][] | null>(null)
   const [firstHeader, setFirstHeader] = useState(true)
   const [importMode, setImportMode] = useState('replace')
@@ -169,6 +184,48 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
       delete colors[key]
     }
     commit({ ...artifact, cellFormatting: Object.keys(formatting).length ? formatting : undefined, cellColors: Object.keys(colors).length ? colors : undefined })
+  }
+  const applyCellBorders = (preset: BorderPreset | 'clear') => {
+    const formatting = { ...artifact.cellFormatting }
+    if (preset === 'clear') {
+      for (const row of selectedRows) for (let column = startColumn; column <= endColumn; column += 1) {
+        const key = `${row}:${column}`
+        const next = { ...(formatting[key] ?? {}) }
+        delete next.borders
+        if (Object.keys(next).length) formatting[key] = next
+        else delete formatting[key]
+      }
+      commit({ ...artifact, cellFormatting: Object.keys(formatting).length ? formatting : undefined })
+      return
+    }
+    const lastRowPosition = selectedRows.length - 1
+    const border = { color: borderColor, width: borderWidth }
+    selectedRows.forEach((row, rowPosition) => {
+      for (let column = startColumn; column <= endColumn; column += 1) {
+        const key = `${row}:${column}`
+        const next = { ...(formatting[key] ?? {}) }
+        const borders = { ...(next.borders ?? {}) }
+        if (preset === 'all') {
+          if (rowPosition === 0) borders.top = border
+          if (column === startColumn) borders.left = border
+          borders.bottom = border
+          borders.right = border
+        } else if (preset === 'outer') {
+          if (rowPosition === 0) borders.top = border
+          if (rowPosition === lastRowPosition) borders.bottom = border
+          if (column === startColumn) borders.left = border
+          if (column === endColumn) borders.right = border
+        } else if (preset === 'insideHorizontal' && rowPosition < lastRowPosition) borders.bottom = border
+        else if (preset === 'insideVertical' && column < endColumn) borders.right = border
+        else if (preset === 'top' && rowPosition === 0) borders.top = border
+        else if (preset === 'right' && column === endColumn) borders.right = border
+        else if (preset === 'bottom' && rowPosition === lastRowPosition) borders.bottom = border
+        else if (preset === 'left' && column === startColumn) borders.left = border
+        next.borders = borders
+        formatting[key] = next
+      }
+    })
+    commit({ ...artifact, cellFormatting: Object.keys(formatting).length ? formatting : undefined })
   }
   const focus = (address: Address, extend = false, immediate = false) => {
     editingRef.current = null
@@ -418,6 +475,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
         <button className={`tool-button table-wrap-button${activeFormatting.wrap ? ' tool-button--active' : ''}`} type="button" aria-label="自动换行" title="自动换行" aria-pressed={Boolean(activeFormatting.wrap)} disabled={formattingDisabled} onClick={() => applyCellFormatting({ wrap: activeFormatting.wrap ? undefined : true })}><Icon name="wrap" size={16} /><span>换行</span></button>
         <label className="table-format-size"><span>字号</span><select aria-label="字号" title="设置所选单元格字号" value={activeFormatting.fontSize ?? 0} disabled={formattingDisabled} onChange={(event) => applyCellFormatting({ fontSize: Number(event.target.value) || undefined })}><option value={0}>默认</option>{fontSizes.map((size) => <option key={size} value={size}>{size}px</option>)}</select></label>
         <details className="editor-menu table-text-color-menu"><summary aria-label="文字颜色" title="文字颜色"><span className="table-font-color-preview" style={{ color: activeFormatting.textColor ?? 'currentColor', borderColor: activeFormatting.textColor ?? 'currentColor' }}>A</span><span>颜色</span></summary><div><span className="table-menu-label">文字颜色</span><div className="table-text-color-options">{textColors.map((color) => <button key={color.value} type="button" className="table-text-color-swatch" style={{ backgroundColor: color.value }} aria-label={`${color.label}文字`} aria-pressed={activeFormatting.textColor === color.value} title={color.label} disabled={formattingDisabled} onClick={(event) => { applyCellFormatting({ textColor: color.value }); event.currentTarget.closest('details')?.removeAttribute('open') }} />)}</div><label className="table-custom-color"><span>自定义</span><input type="color" aria-label="自定义文字颜色" value={activeFormatting.textColor ?? '#ff9c4a'} disabled={formattingDisabled} onChange={(event) => applyCellFormatting({ textColor: event.target.value })} /></label><button type="button" disabled={formattingDisabled} onClick={(event) => { applyCellFormatting({ textColor: undefined }); event.currentTarget.closest('details')?.removeAttribute('open') }}>恢复默认颜色</button><button type="button" disabled={formattingDisabled} onClick={(event) => { clearSelectedCellFormatting(); event.currentTarget.closest('details')?.removeAttribute('open') }}>清除单元格格式</button></div></details>
+        <details className="editor-menu table-border-menu"><summary aria-label="单元格边框" title="设置选区边框"><Icon name="border" size={15} /><span>边框</span></summary><div><span className="table-menu-label">边框位置</span><div className="table-border-preset-grid">{borderPresets.map((preset) => <button key={preset.value} type="button" disabled={formattingDisabled} onClick={(event) => { applyCellBorders(preset.value); event.currentTarget.closest('details')?.removeAttribute('open') }}>{preset.label}</button>)}</div><span className="table-menu-label">线宽</span><div className="table-border-width-options"><button type="button" aria-pressed={borderWidth === 1} onClick={() => setBorderWidth(1)}>细</button><button type="button" aria-pressed={borderWidth === 2} onClick={() => setBorderWidth(2)}>粗</button></div><span className="table-menu-label">边框颜色</span><div className="table-border-color-options">{borderColors.map((color) => <button key={color.value} type="button" className="table-text-color-swatch" style={{ backgroundColor: color.value }} aria-label={`${color.label}边框`} aria-pressed={borderColor === color.value} title={color.label} onClick={() => setBorderColor(color.value)} />)}</div><label className="table-custom-color"><span>自定义</span><input type="color" aria-label="自定义边框颜色" value={borderColor} onChange={(event) => setBorderColor(event.target.value)} /></label><button type="button" disabled={formattingDisabled} onClick={(event) => { applyCellBorders('clear'); event.currentTarget.closest('details')?.removeAttribute('open') }}>清除边框</button></div></details>
       </div>
       <div className="editor-command-group table-command-actions">
         <details className="editor-menu table-group-menu"><summary className={artifact.groupBy !== undefined ? 'tool-button--active' : ''}>分组</summary><div><button type="button" onClick={() => setGroupBy(-1)}>取消分组</button>{artifact.columns.map((column, index) => <button key={index} type="button" onClick={() => setGroupBy(index)}>按 {columnName(index)} · {column} 分组</button>)}</div></details>
@@ -450,7 +508,7 @@ function TableEditor({ artifact, onChange }: TableEditorProps) {
           const error = result.error ?? validateCell(raw, columnType(columnIndex))
           const formatting = cellFormatting(address)
           const isNumeric = typeof result.value === 'number'
-          const cellStyle = { width: columnWidth(columnIndex), textAlign: formatting.alignment ?? (isNumeric ? 'right' : 'left'), color: formatting.textColor, fontSize: formatting.fontSize ? `${formatting.fontSize}px` : undefined, height: formatting.wrap ? 'auto' : undefined }
+          const cellStyle = { width: columnWidth(columnIndex), textAlign: formatting.alignment ?? (isNumeric ? 'right' : 'left'), color: formatting.textColor, fontSize: formatting.fontSize ? `${formatting.fontSize}px` : undefined, height: formatting.wrap ? 'auto' : undefined, borderTop: tableBorderCss(formatting.borders?.top), borderRight: tableBorderCss(formatting.borders?.right), borderBottom: tableBorderCss(formatting.borders?.bottom), borderLeft: tableBorderCss(formatting.borders?.left) }
           return <td key={columnIndex} style={cellStyle} role="gridcell" data-cell={`${rowIndex}:${columnIndex}`} data-fill={artifact.cellColors?.[`${rowIndex}:${columnIndex}`]} data-wrap={formatting.wrap ? 'true' : undefined} aria-selected={inRange} aria-invalid={Boolean(error)} tabIndex={isActive ? 0 : -1} className={`${inRange ? 'table-cell--selected ' : ''}${isActive ? 'table-cell--active ' : ''}${error ? 'table-cell--error ' : ''}${isNumeric ? 'table-cell--numeric' : ''}`} title={error || (raw.startsWith('=') ? raw : undefined)} onClick={(event) => { if (!isEditing) focus(address, event.shiftKey, true) }} onDoubleClick={() => edit(address)}>
             {isEditing ? <input className="table-cell-editor" style={{ fontSize: cellStyle.fontSize, color: cellStyle.color, textAlign: cellStyle.textAlign }} list={columnType(columnIndex) === 'select' ? `aeback-${artifact.id}-select-${columnIndex}` : undefined} type={columnType(columnIndex) === 'date' && !raw.startsWith('=') ? 'date' : columnType(columnIndex) === 'image' ? 'url' : 'text'} aria-label={`编辑 ${columnName(columnIndex)}${rowIndex + 1}`} value={editing.draft} autoFocus onChange={(event) => setEditing({ ...editing, draft: event.target.value })} onClick={(event) => event.stopPropagation()} onBlur={finishEdit} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); finishEdit(); if (event.key === 'Enter') move(event.shiftKey ? -1 : 1, 0); else move(0, event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.preventDefault(); editingRef.current = null; setEditing(null); focus(address) } }} /> : columnType(columnIndex) === 'checkbox' && !raw.startsWith('=') && !error ? <input type="checkbox" aria-label={`切换 ${columnName(columnIndex)}${rowIndex + 1}`} checked={raw.toUpperCase() === 'TRUE'} onClick={(event) => event.stopPropagation()} onChange={(event) => { setSelected(address); setCell(address, event.target.checked ? 'TRUE' : 'FALSE') }} /> : columnType(columnIndex) === 'select' && !raw.startsWith('=') ? <span className="table-select-value" style={{ fontSize: cellStyle.fontSize, color: cellStyle.color }} data-tone={Math.max(0, selectOptions(columnIndex).indexOf(raw)) % 6}>{displayCell(result)}</span> : columnType(columnIndex) === 'image' && !raw.startsWith('=') && !error ? <TableImageCell source={raw} /> : <span>{displayCell(result)}</span>}
           </td>
