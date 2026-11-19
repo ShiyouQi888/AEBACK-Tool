@@ -39,6 +39,13 @@ const lineStyles: Array<{ value: MindMapLineStyle; label: string; icon: IconName
 type MindMapSide = 'up' | 'right' | 'down' | 'left'
 const sideLabels: Record<MindMapSide, string> = { up: '上方', right: '右侧', down: '下方', left: '左侧' }
 
+function getMindMapConnectionAnchor(center: { x: number; y: number }, width: number, height: number, side: MindMapSide) {
+  if (side === 'up') return { x: center.x, y: center.y - height / 2 }
+  if (side === 'right') return { x: center.x + width / 2, y: center.y }
+  if (side === 'down') return { x: center.x, y: center.y + height / 2 }
+  return { x: center.x - width / 2, y: center.y }
+}
+
 function createId() {
   return `map-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`
 }
@@ -605,16 +612,24 @@ function MindMapEditor({ artifact, onChange, onBack, onDelete, theme, onToggleTh
             const to = positionFor(node)
             const dx = to.x - from.x
             const dy = to.y - from.y
-            const midpointX = (from.x + to.x) / 2
-            const midpointY = (from.y + to.y) / 2
-            const horizontal = Math.abs(dx) >= Math.abs(dy)
-            const controlX = horizontal ? midpointX : from.x
-            const controlY = horizontal ? from.y : midpointY
+            const horizontal = Math.abs(dx) >= Math.abs(dy) * 0.55
+            const sourceSide: MindMapSide = horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up')
+            const targetSide: MindMapSide = horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
+            const fromSize = getMindMapNodeSize(from.depth)
+            const toSize = getMindMapNodeSize(to.depth)
+            const start = getMindMapConnectionAnchor(from, fromSize.width, fromSize.height, sourceSide)
+            const end = getMindMapConnectionAnchor(to, toSize.width, toSize.height, targetSide)
+            const midpointX = (start.x + end.x) / 2
+            const midpointY = (start.y + end.y) / 2
+            const edgeDx = end.x - start.x
+            const edgeDy = end.y - start.y
             const path = connectionStyle === 'orthogonal'
               ? horizontal
-                ? `M ${from.x} ${from.y} L ${midpointX} ${from.y} L ${midpointX} ${to.y} L ${to.x} ${to.y}`
-                : `M ${from.x} ${from.y} L ${from.x} ${midpointY} L ${to.x} ${midpointY} L ${to.x} ${to.y}`
-              : `M ${from.x} ${from.y} Q ${controlX} ${controlY} ${to.x} ${to.y}`
+                ? `M ${start.x} ${start.y} L ${midpointX} ${start.y} L ${midpointX} ${end.y} L ${end.x} ${end.y}`
+                : `M ${start.x} ${start.y} L ${start.x} ${midpointY} L ${end.x} ${midpointY} L ${end.x} ${end.y}`
+              : horizontal
+                ? `M ${start.x} ${start.y} C ${start.x + edgeDx * 0.42} ${start.y} ${end.x - edgeDx * 0.42} ${end.y} ${end.x} ${end.y}`
+                : `M ${start.x} ${start.y} C ${start.x} ${start.y + edgeDy * 0.42} ${end.x} ${end.y - edgeDy * 0.42} ${end.x} ${end.y}`
             return <path key={`edge-${node.id}`} className={`mindmap-connection mindmap-connection--${connectionStyle} mindmap-connection--${defaultColor(node, root.id, artifact.nodes.indexOf(node))}`} d={path} />
           })}
           {visibleNodes.map((node) => {

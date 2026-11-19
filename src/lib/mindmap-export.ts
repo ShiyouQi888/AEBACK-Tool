@@ -21,6 +21,13 @@ export function getMindMapNodeSize(depth: number) {
   return { width: 148 * scale, height: 54 * scale }
 }
 
+function connectionAnchor(center: { x: number; y: number }, width: number, height: number, side: 'up' | 'right' | 'down' | 'left') {
+  if (side === 'up') return { x: center.x, y: center.y - height / 2 }
+  if (side === 'right') return { x: center.x + width / 2, y: center.y }
+  if (side === 'down') return { x: center.x, y: center.y + height / 2 }
+  return { x: center.x - width / 2, y: center.y }
+}
+
 function escapeXml(value: string) {
   return value.replace(/[<>&"']/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[character] ?? character)
 }
@@ -64,22 +71,31 @@ export function createMindMapSvg(artifact: MindMapArtifact, positions: Map<strin
     const parent = artifact.nodes.find((item) => item.id === node.parentId)!
     const from = positions.get(parent.id)!
     const to = positions.get(node.id)!
-    const fromX = toX(from.x)
-    const fromY = toY(from.y)
-    const toNodeX = toX(to.x)
-    const toNodeY = toY(to.y)
-    const dx = toNodeX - fromX
-    const dy = toNodeY - fromY
-    const midpointX = (fromX + toNodeX) / 2
-    const midpointY = (fromY + toNodeY) / 2
-    const horizontal = Math.abs(dx) >= Math.abs(dy)
-    const controlX = horizontal ? midpointX : fromX
-    const controlY = horizontal ? fromY : midpointY
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const horizontalPort = Math.abs(dx) >= Math.abs(dy) * 0.55
+    const horizontal = horizontalPort
+    const sourceSide = horizontalPort ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up')
+    const targetSide = horizontalPort ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'up' : 'down')
+    const fromSize = getMindMapNodeSize(from.depth)
+    const toSize = getMindMapNodeSize(to.depth)
+    const start = connectionAnchor(from, fromSize.width, fromSize.height, sourceSide)
+    const end = connectionAnchor(to, toSize.width, toSize.height, targetSide)
+    const startX = toX(start.x)
+    const startY = toY(start.y)
+    const endX = toX(end.x)
+    const endY = toY(end.y)
+    const edgeDx = endX - startX
+    const edgeDy = endY - startY
+    const midpointX = (startX + endX) / 2
+    const midpointY = (startY + endY) / 2
     const path = artifact.connectionStyle === 'orthogonal'
       ? horizontal
-        ? `M ${fromX} ${fromY} L ${midpointX} ${fromY} L ${midpointX} ${toNodeY} L ${toNodeX} ${toNodeY}`
-        : `M ${fromX} ${fromY} L ${fromX} ${midpointY} L ${toNodeX} ${midpointY} L ${toNodeX} ${toNodeY}`
-      : `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toNodeX} ${toNodeY}`
+        ? `M ${startX} ${startY} L ${midpointX} ${startY} L ${midpointX} ${endY} L ${endX} ${endY}`
+        : `M ${startX} ${startY} L ${startX} ${midpointY} L ${endX} ${midpointY} L ${endX} ${endY}`
+      : horizontalPort
+        ? `M ${startX} ${startY} C ${startX + edgeDx * 0.42} ${startY} ${endX - edgeDx * 0.42} ${endY} ${endX} ${endY}`
+        : `M ${startX} ${startY} C ${startX} ${startY + edgeDy * 0.42} ${endX} ${endY - edgeDy * 0.42} ${endX} ${endY}`
     const palette = colors[resolvedColor(node, root.id, indexById.get(node.id) ?? 0)]
     return `<path d="${path}" fill="none" stroke="${palette.edge}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>`
   }).join('\n')
