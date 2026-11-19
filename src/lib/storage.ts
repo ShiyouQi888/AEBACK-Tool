@@ -1,5 +1,6 @@
 // Aeback browser persistence — IndexedDB workspace storage with automatic localStorage migration.
 import type { WorkspaceArtifact } from '../types'
+import { refreshStarterExample } from '../data'
 
 const LEGACY_STORAGE_KEY = 'aeback.workspace.v2'
 const DATABASE_NAME = 'aeback.workspace'
@@ -89,10 +90,10 @@ export async function loadWorkspace(fallback: WorkspaceArtifact[]): Promise<Work
     const database = await openDatabase()
     const record = await readWorkspaceRecord(database)
     const stored = parseWorkspace(record?.artifacts)
-    if (stored) return stored
+    if (stored) return refreshStarterExample(stored)
 
     const legacy = readLegacyWorkspace()
-    if (!legacy) return fallback
+    if (!legacy) return refreshStarterExample(fallback)
     try {
       await writeWorkspaceRecord(database, legacy)
     } catch {
@@ -101,10 +102,10 @@ export async function loadWorkspace(fallback: WorkspaceArtifact[]): Promise<Work
     if (!useLegacyStorage) {
       try { window.localStorage.removeItem(LEGACY_STORAGE_KEY) } catch { /* Keep the migrated copy in browser storage if cleanup is blocked. */ }
     }
-    return legacy
+    return refreshStarterExample(legacy)
   } catch {
     useLegacyStorage = true
-    return readLegacyWorkspace() ?? fallback
+    return refreshStarterExample(readLegacyWorkspace() ?? fallback)
   }
 }
 

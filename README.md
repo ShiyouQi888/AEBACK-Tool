@@ -1,7 +1,7 @@
 <!-- Aeback project guide — product entry point and local development. -->
 # AEBACK
 
-Aeback 是个人工具工作台，提供思维导图、知识图谱、智能文档和智能表格。
+Aeback 是个人知识工具工作台，提供思维导图、知识图谱、智能文档和智能表格。根路径 `/` 是 AEBACK 官网，点击「进入工作台」或访问 `/workspace` 打开工具工作区。
 
 ## 启动
 
@@ -23,6 +23,6 @@ npm run dev
 
 ## 数据与架构
 
-所有工具使用同一 `WorkspaceArtifact` 联合类型和本地工作区存储；每种工具各自负责编辑体验。数据保存在浏览器 `localStorage` 的 `aeback.workspace.v2`，可从侧栏导出 AEBACK JSON 备份。当前文章识别使用本地结构与段落提取，不会发送内容到外部服务，也不依赖生成式 AI。
+所有工具使用同一 `WorkspaceArtifact` 联合类型和本地工作区存储；每种工具各自负责编辑体验。工作区数据保存在浏览器 IndexedDB，旧版 `localStorage` 工作区会在首次启动时自动迁移；主题与语言等偏好保存在 `localStorage`。可从侧栏导出 AEBACK JSON 备份。当前文章识别使用本地结构与段落提取，不会发送内容到外部服务，也不依赖生成式 AI。
 
 新增文件应在文件头部注释或必要元数据中包含 Aeback 品牌。

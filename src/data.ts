@@ -2,6 +2,41 @@
 import type { WorkspaceArtifact } from './types'
 
 const updatedAt = '2026-11-18T09:00:00.000Z'
+const legacyStarterDocument = '# 产品目标\n\n把常用的个人知识工具放在一个轻量工作台中。\n\n# 核心工具\n\n思维导图用于梳理结构，知识图谱从文章中提取节点和关系，智能文档与智能表格承载日常工作。'
+const starterDocumentContent = `**AEBACK · PERSONAL KNOWLEDGE WORKSPACE**
+
+# 让想法彼此连接
+
+AEBACK 把思考、整理与记录放进一个清晰的个人工作台。用合适的工具表达内容，再把重要的知识留在自己的工作区。
+
+> [!NOTE]
+> 这是 AEBACK 的内置示例文档。你可以直接修改、复制或删除它。
+
+## 四种工具，一处工作区
+
+### 思维导图
+
+把复杂主题拆成层次清楚的节点。自由移动节点，调整布局方向、颜色与连接方式。
+
+### 知识图谱
+
+导入文章后提取主题节点与关系。继续整理来源、概念和人物，让知识之间的连接一目了然。
+
+### 智能文档
+
+使用 Markdown 记录内容，借助标题大纲、提示块和代码块保持文档清晰。
+
+### 智能表格
+
+整理计划与资料，使用筛选、排序、公式和单元格格式完成日常管理。
+
+## 本地优先
+
+AEBACK 工作区保存在当前浏览器中。你可以随时导出 JSON 备份，再在需要时整理和恢复自己的资料。
+
+---
+
+*© 2026 AEBACK. 保留所有权利。*`
 
 export const starterArtifacts: WorkspaceArtifact[] = [
   {
@@ -47,9 +82,9 @@ export const starterArtifacts: WorkspaceArtifact[] = [
   {
     id: 'doc-aeback',
     type: 'document',
-    title: 'AEBACK 产品方向',
+    title: 'AEBACK 产品手册',
     updatedAt,
-    content: '# 产品目标\n\n把常用的个人知识工具放在一个轻量工作台中。\n\n# 核心工具\n\n思维导图用于梳理结构，知识图谱从文章中提取节点和关系，智能文档与智能表格承载日常工作。',
+    content: starterDocumentContent,
   },
   {
     id: 'table-reading',
@@ -65,3 +100,16 @@ export const starterArtifacts: WorkspaceArtifact[] = [
     ],
   },
 ]
+
+// Upgrade only the untouched built-in example; preserve documents edited by the user.
+export function refreshStarterExample(artifacts: WorkspaceArtifact[]): WorkspaceArtifact[] {
+  const starter = starterArtifacts.find((artifact) => artifact.id === 'doc-aeback' && artifact.type === 'document')
+  if (!starter || starter.type !== 'document') return artifacts
+  let changed = false
+  const refreshed = artifacts.map((artifact) => {
+    if (artifact.id !== 'doc-aeback' || artifact.type !== 'document' || artifact.title !== 'AEBACK 产品方向' || artifact.content !== legacyStarterDocument) return artifact
+    changed = true
+    return { ...starter, updatedAt: new Date().toISOString() }
+  })
+  return changed ? refreshed : artifacts
+}
