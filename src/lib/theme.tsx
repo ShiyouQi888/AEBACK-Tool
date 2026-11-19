@@ -22,6 +22,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    if (favicon) favicon.href = `${import.meta.env.BASE_URL}${theme === 'dark' ? 'aeback-mark-dark.png' : 'aeback-mark.png'}`
     try {
       window.localStorage.setItem(storageKey, theme)
     } catch {
