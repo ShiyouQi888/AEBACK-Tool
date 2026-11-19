@@ -1,7 +1,7 @@
 // Aeback icon set for a compact, consistent personal tools workspace.
 import type { ReactNode } from 'react'
 
-export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'branch' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo' | 'sun' | 'moon'
+export type IconName = 'grid' | 'mindmap' | 'network' | 'document' | 'table' | 'plus' | 'search' | 'download' | 'back' | 'close' | 'row' | 'column' | 'trash' | 'spark' | 'arrow' | 'list' | 'menu' | 'branch' | 'curve' | 'elbow' | 'arrange' | 'duplicate' | 'undo' | 'redo' | 'sun' | 'moon'
 
 const icons: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.4" /><rect x="14" y="3" width="7" height="7" rx="1.4" /><rect x="3" y="14" width="7" height="7" rx="1.4" /><rect x="14" y="14" width="7" height="7" rx="1.4" /></>,
@@ -20,6 +20,7 @@ const icons: Record<IconName, ReactNode> = {
   spark: <><path d="m12 3 1.6 6.4L20 11l-6.4 1.6L12 19l-1.6-6.4L4 11l6.4-1.6L12 3Z" /><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></>,
   arrow: <><path d="M5 12h14m-6-6 6 6-6 6" /></>,
   list: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
   branch: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M6 7v5a7 7 0 0 0 7 7h3m0 0-3-3m3 3-3 3" /></>,
   curve: <path d="M4 18h4a5 5 0 0 0 5-5V9a4 4 0 0 1 4-4h3" />,
   elbow: <path d="M4 18h8V6h8" />,

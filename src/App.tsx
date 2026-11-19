@@ -15,6 +15,7 @@ const toolTypes: ToolType[] = ['mindmap', 'graph', 'document', 'table']
 const DocumentEditor = lazy(() => import('./components/DocumentEditor'))
 const TableEditor = lazy(() => import('./components/TableEditor'))
 const themeStorageKey = 'aeback-theme'
+const sidebarCollapsedStorageKey = 'aeback-sidebar-collapsed'
 const toolDescriptions: Record<ToolType, string> = {
   mindmap: '把复杂主题拆开，找到清晰的结构。',
   graph: '连接概念与资料，看见知识之间的关系。',
@@ -65,6 +66,13 @@ function App() {
   const [view, setView] = useState<WorkspaceView>('library')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(sidebarCollapsedStorageKey) === 'true'
+    } catch {
+      return false
+    }
+  })
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -79,6 +87,13 @@ function App() {
   }, [theme])
 
   useEffect(() => { setSaveError(saveWorkspace(artifacts)) }, [artifacts])
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(sidebarCollapsedStorageKey, String(sidebarCollapsed))
+    } catch {
+      // Keep the current sidebar state for this session if storage is unavailable.
+    }
+  }, [sidebarCollapsed])
 
   const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedId)
   const filteredArtifacts = useMemo(() => artifacts
@@ -225,8 +240,8 @@ function App() {
   if (selectedArtifact?.type === 'graph') return <KnowledgeGraphEditor artifact={selectedArtifact} onChange={updateArtifact} onBack={() => leaveCanvas('graph')} onDelete={deleteArtifact} onImportArticle={importArticle} theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
 
   return (
-    <div className="aeback-app">
-      <Sidebar view={view} artifacts={artifacts} selectedId={selectedId} onNavigate={navigate} onOpen={openArtifact} onExport={exportWorkspace} />
+    <div className={`aeback-app${sidebarCollapsed ? ' aeback-app--sidebar-collapsed' : ''}`}>
+      <Sidebar view={view} artifacts={artifacts} selectedId={selectedId} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((value) => !value)} onNavigate={navigate} onOpen={openArtifact} onExport={exportWorkspace} />
       <main className={`main-area${selectedArtifact?.type === 'table' ? ' main-area--table' : ''}${selectedArtifact?.type === 'document' ? ' main-area--document' : ''}`}>
         <header className="app-header">
           <div className="heading-area">

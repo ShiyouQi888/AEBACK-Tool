@@ -1,6 +1,7 @@
 // Aeback canvas header — minimal file controls floating above the full-screen canvas.
 import type { ReactNode } from 'react'
 import Icon from './Icon'
+import BrandLogo from './BrandLogo'
 import ThemeToggleButton, { type ThemeMode } from './ThemeToggleButton'
 
 type CanvasHeaderProps = {
@@ -18,7 +19,7 @@ function CanvasHeader({ title, onTitleChange, onBack, onDelete, theme, onToggleT
     <header className="canvas-header">
       <div className="canvas-header-left">
         <button className="canvas-back" type="button" aria-label="返回文件列表" onClick={onBack}><Icon name="back" size={17} /></button>
-        <span className="canvas-brand-mark">A</span>
+        <BrandLogo compact className="canvas-brand-mark" />
         <input aria-label="文件名称" value={title} onChange={(event) => onTitleChange(event.target.value)} />
       </div>
       <div className="canvas-header-right">{children}<ThemeToggleButton theme={theme} onToggle={onToggleTheme} /><button className="canvas-delete" type="button" aria-label="删除文件" title="删除文件" onClick={onDelete}><Icon name="trash" size={16} /></button></div>

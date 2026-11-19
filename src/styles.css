@@ -90,9 +90,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .aeback-app { min-height: 100vh; display: flex; background-color: var(--aeback-page); background-image: linear-gradient(var(--aeback-grid) 1px, transparent 1px), linear-gradient(90deg, var(--aeback-grid) 1px, transparent 1px); background-size: 44px 44px; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 4; width: 232px; display: flex; flex-direction: column; padding: 22px 13px 14px; border-right: 1px solid var(--aeback-line); background: var(--aeback-sidebar); }
-.brand-lockup { display: flex; align-items: center; gap: 10px; margin: 0 0 28px; padding: 0 8px; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.brand-mark { width: 31px; height: 31px; display: grid; place-items: center; color: var(--aeback-on-accent); border-radius: 9px; background: var(--aeback-brand); font-family: Georgia, serif; font-size: 19px; font-weight: 700; }
-.brand-wordmark { color: var(--aeback-accent); background: linear-gradient(90deg, var(--aeback-accent) 0 36%, var(--aeback-brand) 36% 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 12px; letter-spacing: .14em; font-weight: 790; }
+.sidebar-header { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 28px; padding: 0 5px; }
+.brand-lockup { min-width: 0; display: flex; align-items: center; margin: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.aeback-brand-image { width: 144px; height: 32px; display: block; object-fit: contain; }
+.aeback-brand-image--compact { width: 31px; height: 31px; }
+.sidebar-toggle { width: 32px; height: 32px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; color: var(--aeback-subtle); border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer; transition: color 130ms ease, background 130ms ease, border-color 130ms ease; }
+.sidebar-toggle:hover { color: var(--aeback-ink); border-color: var(--aeback-line); background: var(--aeback-canvas); }
+.sidebar-toggle:focus-visible { outline-offset: 1px; }
 .primary-nav { display: grid; gap: 4px; }
 .nav-link { min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 0 11px; color: var(--aeback-subtle); border: 0; border-radius: 8px; background: transparent; text-align: left; font-size: 13px; font-weight: 520; cursor: pointer; }
 .nav-link:hover { color: var(--aeback-ink); background: var(--aeback-canvas); }
@@ -295,9 +299,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 @media (max-width: 680px) {
   .sidebar { position: sticky; inset: 0 0 auto; width: 100%; height: 58px; flex-direction: row; align-items: center; gap: 13px; padding: 0 12px; border-right: 0; border-bottom: 1px solid var(--line); }
-  .brand-lockup { flex: 0 0 auto; margin: 0; padding: 0; }
-  .brand-mark { width: 29px; height: 29px; font-size: 17px; }
-  .brand-wordmark { font-size: 11px; }
+  .sidebar-header { flex: 0 0 auto; gap: 5px; margin: 0; padding: 0; }
+  .brand-lockup { flex: 0 0 auto; }
+  .aeback-brand-image { width: 112px; height: auto; }
+  .aeback-brand-image--compact { width: 29px; height: 29px; }
+  .sidebar-toggle { display: none; }
   .primary-nav { display: flex; flex: 1; gap: 2px; overflow: auto; }
   .nav-link { width: 38px; min-width: 38px; min-height: 38px; justify-content: center; padding: 0; }
   .nav-link span, .nav-divider { display: none; }
@@ -420,7 +426,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .canvas-delete { width: 32px; padding: 0; color: var(--aeback-danger); }
 .canvas-header-primary { color: var(--aeback-on-accent); border-color: var(--aeback-accent); background: var(--aeback-accent); box-shadow: 0 6px 18px var(--aeback-accent-glow); }
 .canvas-header-primary:hover { color: var(--aeback-on-accent); background: var(--aeback-accent-hover); }
-.canvas-brand-mark { width: 25px; height: 25px; display: grid; flex: 0 0 auto; place-items: center; color: var(--aeback-on-accent); border-radius: 7px; background: var(--aeback-brand); font-family: Georgia, serif; font-size: 16px; font-weight: 700; }
+.canvas-brand-mark { width: 25px; height: 25px; flex: 0 0 auto; object-fit: contain; }
 .canvas-header-left input { width: min(43vw, 510px); min-width: 80px; padding: 5px 2px; color: var(--aeback-ink); border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; font-weight: 620; }
 .canvas-header-left input:focus { border-bottom: 1px solid var(--aeback-focus); }
 .canvas-tool-rail, .canvas-zoom {
@@ -635,4 +641,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (max-width: 680px) {
   .canvas-export-dropdown { width: min(208px, calc(100vw - 24px)); }
   .canvas-export-status { top: 62px; right: 8px; }
+}
+
+/* Aeback compact navigation — preserve every tool while reclaiming canvas width. */
+.sidebar, .main-area { transition: width 160ms ease, margin-left 160ms ease; }
+.aeback-app--sidebar-collapsed .sidebar { width: 72px; padding: 18px 8px 14px; }
+.aeback-app--sidebar-collapsed .main-area { width: calc(100% - 72px); margin-left: 72px; }
+.sidebar--collapsed .sidebar-header { justify-content: flex-start; gap: 2px; margin-bottom: 24px; padding: 0; }
+.sidebar--collapsed .brand-lockup { padding: 0; }
+.sidebar--collapsed .aeback-brand-image--compact { width: 24px; height: 24px; }
+.sidebar--collapsed .sidebar-toggle { width: 26px; height: 30px; }
+.sidebar--collapsed .nav-link { justify-content: center; gap: 0; padding: 0; }
+.sidebar--collapsed .nav-link span, .sidebar--collapsed .sidebar-caption, .sidebar--collapsed .recent-link span { display: none; }
+.sidebar--collapsed .nav-divider { margin-right: 4px; margin-left: 4px; }
+.sidebar--collapsed .sidebar-recent { margin-top: 22px; }
+.sidebar--collapsed .recent-link { justify-content: center; gap: 0; padding: 0; }
+.sidebar--collapsed .sidebar-bottom { justify-items: center; }
+.sidebar--collapsed .storage-state { justify-content: center; gap: 0; padding-right: 0; padding-left: 0; font-size: 0; }
+.sidebar--collapsed .export-button { justify-content: center; gap: 0; padding: 0; font-size: 0; }
+
+@media (max-width: 680px) {
+  .aeback-app--sidebar-collapsed .sidebar { position: sticky; inset: 0 0 auto; width: 100%; height: 58px; flex-direction: row; align-items: center; gap: 13px; padding: 0 12px; }
+  .aeback-app--sidebar-collapsed .main-area { width: 100%; margin-left: 0; }
+  .sidebar--collapsed .sidebar-header { flex: 0 0 auto; gap: 5px; margin: 0; padding: 0; }
+  .sidebar--collapsed .brand-lockup { display: flex; }
+  .sidebar--collapsed .aeback-brand-image--compact { width: 29px; height: 29px; }
+  .sidebar--collapsed .sidebar-toggle { display: none; }
+  .sidebar--collapsed .primary-nav { display: flex; flex: 1; }
+  .sidebar--collapsed .nav-link { width: 38px; min-width: 38px; min-height: 38px; justify-content: center; padding: 0; }
+  .sidebar--collapsed .sidebar-recent, .sidebar--collapsed .sidebar-bottom { display: none; }
 }

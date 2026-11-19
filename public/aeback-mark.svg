@@ -1,0 +1,16 @@
+<!-- Aeback brand mark: a connected A for objects, ideas, and relationships. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" role="img" aria-labelledby="title">
+  <title id="title">Aeback</title>
+  <defs>
+    <linearGradient id="brand" x1="2" y1="2" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B55FF" />
+      <stop offset="1" stop-color="#6B2CE3" />
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="34" height="34" rx="9" fill="url(#brand)" />
+  <path d="M9 25 18 8l9 17M12 19.5h12" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.1" />
+  <circle cx="9" cy="25" r="2" fill="#fff" />
+  <circle cx="18" cy="8" r="2" fill="#fff" />
+  <circle cx="27" cy="25" r="2" fill="#fff" />
+  <circle cx="18" cy="19.5" r="2.3" fill="#FF6A35" stroke="#fff" stroke-width=".8" />
+</svg>
